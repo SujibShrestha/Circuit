@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from dotenv import load_dotenv
 import uvicorn
-
+from fastapi.middleware.cors import CORSMiddleware
 from src.db.base import Base
 from src.db.session import engine
 from src.routes import auth_routes
@@ -9,6 +9,15 @@ from src.routes import auth_routes
 load_dotenv()
 
 app = FastAPI(title="Circuit API")
+
+#MIDDLEWARE
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.on_event("startup")
