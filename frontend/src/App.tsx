@@ -29,6 +29,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<SignUp />} />
+      <Route path="/signup" element={<SignUp />} />
       <Route
         path="/"
         element={
