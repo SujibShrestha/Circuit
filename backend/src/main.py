@@ -4,6 +4,7 @@ import uvicorn
 
 from src.db.base import Base
 from src.db.session import engine
+from src.routes import auth_routes
 
 load_dotenv()
 
@@ -20,6 +21,9 @@ def on_startup():
 @app.get("/")
 async def root():
     return {"message": "Welcome To Circuit API"}
+
+#ROUTES
+app.include_router(auth_routes.router)
 
 
 @app.get("/health")
