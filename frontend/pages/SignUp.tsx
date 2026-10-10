@@ -62,7 +62,7 @@ export default function SignUp() {
       } else {
         await login(form.email.trim(), form.password);
       }
-      navigate('/', { replace: true });
+      navigate('/explore', { replace: true });
     } catch (error) {
       setError(errorMessage(error));
     } finally {
@@ -70,7 +70,7 @@ export default function SignUp() {
     }
   }
 
-  if (!loading && user) return <Navigate to="/" replace />;
+  if (!loading && user) return <Navigate to="/explore" replace />;
 
   return (
     <main className="auth-shell">
@@ -133,3 +133,4 @@ export default function SignUp() {
     </main>
   );
 }
+

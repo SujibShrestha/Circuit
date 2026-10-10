@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import ProtectedRoute from "../components/ProtectedRoute";
 import { useAuth } from "../context/AuthContext";
+import Explore from "../pages/Explore";
 import SignUp from "../pages/SignUp";
 import "./App.css";
 
@@ -30,6 +31,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<SignUp />} />
       <Route path="/signup" element={<SignUp />} />
+      <Route path="/explore" element={<Explore />} />
       <Route
         path="/"
         element={
