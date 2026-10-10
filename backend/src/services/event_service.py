@@ -24,7 +24,11 @@ def create_event(db:Session, payload: EventCreate, organizer_id: uuid.UUID) ->Ev
         raise ValueError("Failed to create event.")
     
     db.add(event)
-    db.commit()
+    try:
+     db.commit()
+    except Exception as e:
+        db.rollback()
+        raise ValueError(f"Failed to create event: {e}")
     db.refresh(event)
 
     return event

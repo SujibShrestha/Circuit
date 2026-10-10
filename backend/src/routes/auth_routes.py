@@ -21,7 +21,6 @@ def login_route(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
-    print("Login route called with username:", form_data.username)
     return login(form_data, db)
 
 
