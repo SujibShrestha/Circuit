@@ -1,4 +1,5 @@
-import { Link, useLocation } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const NAV_ITEMS: { label: string; to?: string }[] = [
@@ -20,8 +21,40 @@ function initials(name: string) {
 }
 
 export default function Navbar() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+  const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!profileOpen) return;
+
+    function onPointerDown(event: PointerEvent) {
+      if (!profileRef.current?.contains(event.target as Node)) {
+        setProfileOpen(false);
+      }
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setProfileOpen(false);
+      }
+    }
+
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [profileOpen]);
+
+  function handleLogout() {
+    logout();
+    setProfileOpen(false);
+    navigate('/login', { replace: true });
+  }
 
   return (
     <header className="fixed inset-x-0 top-0 z-[1000] border-b border-[#dce2f7] bg-white">
@@ -75,11 +108,35 @@ export default function Navbar() {
           )}
 
           {user ? (
-            <div
-              className="grid h-8 w-8 place-items-center rounded-full border-2 border-[#141b2b] bg-[#57dffe] font-['Space_Grotesk'] text-[10px] font-bold leading-3 text-[#006172] shadow-[2px_2px_0_#141b2b]"
-              title={user.name}
-            >
-              {initials(user.name)}
+            <div className="relative" ref={profileRef}>
+              <button
+                type="button"
+                aria-expanded={profileOpen}
+                aria-haspopup="menu"
+                className="grid h-8 w-8 place-items-center rounded-full border-2 border-[#141b2b] bg-[#57dffe] font-['Space_Grotesk'] text-[10px] font-bold leading-3 text-[#006172] shadow-[2px_2px_0_#141b2b] transition hover:-translate-x-px hover:-translate-y-px hover:shadow-[3px_3px_0_#141b2b] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+                title={user.name}
+                onClick={() => setProfileOpen((open) => !open)}
+              >
+                {initials(user.name)}
+              </button>
+
+              {profileOpen && (
+                <div className="absolute right-0 top-11 w-56 rounded-md border-2 border-[#141b2b] bg-white p-2 shadow-[3px_3px_0_#141b2b]" role="menu">
+                  <div className="border-b border-[#dce2f7] px-2 pb-2">
+                    <p className="truncate text-sm font-semibold leading-5">{user.name}</p>
+                    <p className="truncate text-xs leading-4 text-[#434655]">{user.email}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="mt-2 flex w-full items-center gap-2 rounded px-2 py-2 text-left font-['Space_Grotesk'] text-xs font-bold uppercase leading-4 text-[#141b2b] hover:bg-[#e9edff]"
+                    role="menuitem"
+                    onClick={handleLogout}
+                  >
+                    <span className="material-symbols-outlined text-base" aria-hidden="true">logout</span>
+                    Logout
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <Link className="font-['Space_Grotesk'] text-xs font-semibold uppercase leading-4 tracking-normal text-[#434655] no-underline" to="/login">
