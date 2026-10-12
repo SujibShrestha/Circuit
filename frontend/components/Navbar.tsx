@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 
 const NAV_ITEMS: { label: string; to?: string }[] = [
   { label: 'Map Explore', to: '/explore' },
-  { label: 'Event Details' },
+  { label: 'Event Details', to: '/events' },
   { label: 'Leaderboard' },
   { label: 'My Profile' },
   { label: 'Host Event', to: '/host-event' },
@@ -34,7 +34,7 @@ export default function Navbar() {
 
           <nav className="hidden items-center gap-4 xl:flex" aria-label="Primary">
             {NAV_ITEMS.map((item) => {
-              const isActive = item.to === location.pathname;
+              const isActive = item.to === '/events' ? location.pathname.startsWith('/events') : item.to === location.pathname;
 
               if (!item.to) {
                 return (

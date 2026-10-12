@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import type { Map as LeafletMap } from 'leaflet';
+import { Link } from 'react-router-dom';
 import { Circle, MapContainer, Marker, Popup, TileLayer } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import api from '../api/api';
@@ -185,6 +186,14 @@ function EventCard({ event }: { event: MappedEvent }) {
           <strong className="mt-1 block text-xs text-[#141b2b]">{event.allow_teams ? event.max_team_size : 'Solo'}</strong>
         </div>
       </div>
+
+      <Link
+        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#141b2b] bg-[#1d4ed8] px-3 py-2 font-['Space_Grotesk'] text-xs font-bold uppercase leading-4 text-white no-underline shadow-[3px_3px_0_#141b2b] transition hover:-translate-x-px hover:-translate-y-px hover:shadow-[4px_4px_0_#141b2b] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+        to={`/events/${event.id}`}
+      >
+        View details
+        <Icon name="arrow_forward" className="text-base text-white" />
+      </Link>
     </article>
   );
 }
@@ -467,7 +476,7 @@ export default function Explore() {
             ))}
           </MapContainer>
 
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-[500] mx-auto flex w-full max-w-7xl flex-col gap-2 px-4 pt-4 lg:px-10">
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-500 mx-auto flex w-full max-w-7xl flex-col gap-2 px-4 pt-4 lg:px-10">
             <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
               <div className="pointer-events-auto flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
                 <label className="relative flex w-full min-w-0 items-center rounded-full border-2 border-[#141b2b] bg-white shadow-[3px_3px_0_#141b2b] transition focus-within:-translate-x-px focus-within:-translate-y-px focus-within:shadow-[4px_4px_0_#1d4ed8] sm:w-[min(28rem,48vw)]">
@@ -548,7 +557,7 @@ export default function Explore() {
           </div>
 
           {(isLoading || error || visibleEvents.length === 0 || mappedEvents.length === 0) && (
-            <div className="absolute left-1/2 top-1/2 z-[500] w-[min(24rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-md border border-[#dce2f7] bg-white px-4 py-3 text-center text-xs font-medium leading-5 tracking-normal shadow-[0_8px_24px_rgb(20_27_43_/_10%)]">
+            <div className="absolute left-1/2 top-1/2 z-500 w-[min(24rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-md border border-[#dce2f7] bg-white px-4 py-3 text-center text-xs font-medium leading-5 tracking-normal shadow-[0_8px_24px_rgb(20_27_43/10%)]">
               {isLoading && 'Loading events'}
               {!isLoading && error && error}
               {!isLoading && !error && visibleEvents.length === 0 && 'No events match your filters'}
@@ -556,7 +565,7 @@ export default function Explore() {
             </div>
           )}
 
-          <div className="absolute bottom-6 right-6 z-[500] flex flex-col items-center gap-2">
+          <div className="absolute bottom-6 right-6 z-500 flex flex-col items-center gap-2">
             <div className="overflow-hidden rounded-lg border-2 border-[#141b2b] bg-white shadow-[3px_3px_0_#141b2b]">
               <button type="button" className="grid h-10 w-10 place-items-center border-b-2 border-[#141b2b] hover:bg-[#e9edff]" aria-label="Zoom in" title="Zoom in" onClick={() => mapRef.current?.zoomIn()}>
                 <Icon name="add" />
