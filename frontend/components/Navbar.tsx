@@ -24,7 +24,7 @@ export default function Navbar() {
   const location = useLocation();
 
   return (
-    <header className="fixed inset-x-0 top-0 z-1000 border-b border-[#dce2f7] bg-white">
+    <header className="fixed inset-x-0 top-0 z-[1000] border-b border-[#dce2f7] bg-white">
       <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between gap-4 px-4 lg:px-10">
         <div className="flex min-w-0 items-center gap-6">
           <Link className="flex items-center gap-2 text-[#141b2b] no-underline" to="/explore">

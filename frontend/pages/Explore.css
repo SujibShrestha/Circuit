@@ -1,14 +1,59 @@
 .leaflet-container {
+  position: relative;
+  isolation: isolate;
+  height: 100%;
+  width: 100%;
+  background: #f1f3ff;
   font-family: Inter, system-ui, sans-serif;
+  outline: none;
+}
+
+.leaflet-container *,
+.leaflet-container *::before,
+.leaflet-container *::after {
+  box-sizing: border-box;
+}
+
+.leaflet-container img,
+.leaflet-container .leaflet-tile,
+.leaflet-container .leaflet-marker-icon,
+.leaflet-container .leaflet-marker-shadow {
+  max-width: none !important;
+  max-height: none !important;
+}
+
+.leaflet-map-pane {
+  z-index: 0;
 }
 
 .leaflet-tile-pane {
   filter: saturate(0.82) contrast(1.04) brightness(1.03);
 }
 
+.leaflet-marker-pane {
+  z-index: 520;
+}
+
+.leaflet-popup-pane {
+  z-index: 650;
+}
+
+.leaflet-bottom.leaflet-right {
+  right: auto;
+  left: 0;
+}
+
+.leaflet-control-container {
+  font-family: 'Space Grotesk', sans-serif;
+}
+
 .leaflet-control-attribution {
+  margin: 0 0 10px 10px !important;
+  padding: 3px 8px !important;
   border-top: 2px solid #141b2b;
-  border-left: 2px solid #141b2b;
+  border-right: 2px solid #141b2b;
+  border-left: 0;
+  border-radius: 0 8px 0 0;
   background: rgb(255 255 255 / 90%) !important;
   color: #434655;
   font-family: 'Space Grotesk', sans-serif;
@@ -21,6 +66,14 @@
   color: #0037b0;
 }
 
+.leaflet-control-attribution a:hover {
+  color: #1d4ed8;
+}
+
+.leaflet-popup {
+  margin-bottom: 18px;
+}
+
 .circuit-marker-shell {
   background: transparent;
   border: 0;
@@ -31,6 +84,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  pointer-events: auto;
   width: max-content;
   max-width: 230px;
   min-height: 46px;
@@ -41,6 +95,7 @@
   box-shadow: 3px 3px 0 #141b2b;
   color: #141b2b;
   white-space: nowrap;
+  transform-origin: 18px calc(100% - 8px);
   transition: transform 150ms ease, box-shadow 150ms ease;
 }
 
@@ -169,6 +224,7 @@
 }
 
 .event-popup .leaflet-popup-content-wrapper {
+  overflow: hidden;
   border: 2px solid #141b2b;
   border-radius: 8px;
   background: #fff;
@@ -176,6 +232,7 @@
 }
 
 .event-popup .leaflet-popup-content {
+  min-width: min(22rem, calc(100vw - 3rem));
   width: auto !important;
   margin: 14px;
 }
@@ -193,10 +250,18 @@
 @media (max-width: 640px) {
   .circuit-marker {
     max-width: 190px;
+    min-height: 42px;
+    padding-right: 10px;
+  }
+
+  .circuit-marker-core {
+    height: 30px;
+    width: 30px;
   }
 
   .circuit-marker-label {
     max-width: 110px;
+    font-size: 10px;
   }
 
   .circuit-marker-venue {
@@ -205,6 +270,11 @@
 
   .leaflet-popup {
     margin-bottom: 28px;
+  }
+
+  .event-popup .leaflet-popup-content {
+    min-width: min(20rem, calc(100vw - 2rem));
+    margin: 12px;
   }
 }
 

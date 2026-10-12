@@ -42,3 +42,4 @@ class EventOut(BaseModel):
     allow_teams: bool
     max_team_size: int
     status: str  # derived property on the model
+    distance_km: Optional[float] = None
