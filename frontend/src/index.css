@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 :root {
   font-family: 'Inter', sans-serif;
   color: #141b2b;
@@ -17,3 +19,4 @@ button { cursor: pointer; }
 button:disabled { cursor: wait; opacity: .65; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #0037b0; outline-offset: 3px; }
 h1, p { margin: 0; }
+.material-symbols-outlined { font-family: 'Material Symbols Outlined'; font-weight: normal; font-style: normal; font-size: 20px; line-height: 1; letter-spacing: normal; text-transform: none; display: inline-block; white-space: nowrap; direction: ltr; font-feature-settings: 'liga'; -webkit-font-smoothing: antialiased; flex-shrink: 0; }
