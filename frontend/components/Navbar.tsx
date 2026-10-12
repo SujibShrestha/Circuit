@@ -6,7 +6,7 @@ const NAV_ITEMS: { label: string; to?: string }[] = [
   { label: 'Event Details' },
   { label: 'Leaderboard' },
   { label: 'My Profile' },
-  { label: 'Host Event' },
+  { label: 'Host Event', to: '/host-event' },
 ];
 
 function initials(name: string) {
@@ -91,3 +91,4 @@ export default function Navbar() {
     </header>
   );
 }
+

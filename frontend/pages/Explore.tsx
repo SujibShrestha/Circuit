@@ -18,8 +18,8 @@ type ApiEvent = {
   description?: string | null;
   category: Category;
   venue: string;
-  latitude?: number | null;
-  longitude?: number | null;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
   start_time: string;
   end_time: string;
   capacity: number;
@@ -66,8 +66,16 @@ function Icon({ name, className = '' }: { name: string; className?: string }) {
   );
 }
 
-function hasCoordinates(event: ApiEvent): event is LocatedEvent {
-  return typeof event.latitude === 'number' && typeof event.longitude === 'number';
+function isLatLng(position: [number, number] | null): position is [number, number] {
+  return Boolean(position && Number.isFinite(position[0]) && Number.isFinite(position[1]));
+}
+
+function eventPosition(event: ApiEvent): [number, number] | null {
+  const latitude = Number(event.latitude);
+  const longitude = Number(event.longitude);
+  const position: [number, number] = [latitude, longitude];
+
+  return isLatLng(position) ? position : null;
 }
 
 function formatDateTime(value: string) {
@@ -85,18 +93,13 @@ function markerIcon(event: MappedEvent, selected: boolean) {
     html: `
       <div class="circuit-marker ${selected ? 'is-selected' : ''} circuit-marker-${meta.accent}">
         ${selected ? '<span class="circuit-marker-ping"></span>' : ''}
-        <span class="circuit-marker-core">
-          <span class="material-symbols-outlined circuit-marker-icon">${meta.icon}</span>
-        </span>
-        <span class="circuit-marker-copy">
-          <span class="circuit-marker-label">${event.name}</span>
-          <span class="circuit-marker-venue">${event.venue}</span>
-        </span>
+        <span class="material-symbols-outlined circuit-marker-icon">${meta.icon}</span>
+        <span class="circuit-marker-label">${event.name}</span>
       </div>
     `,
-    iconSize: selected ? [250, 58] : [230, 54],
-    iconAnchor: [18, 48],
-    popupAnchor: [92, -46],
+    iconSize: selected ? [220, 44] : [190, 36],
+    iconAnchor: selected ? [110, 22] : [95, 18],
+    popupAnchor: [0, -20],
   });
 }
 
@@ -144,10 +147,11 @@ function EventCard({ event }: { event: MappedEvent }) {
 }
 
 function locationLabel(status: LocationStatus, mappedCount: number) {
+  if (mappedCount > 0) return `${mappedCount} mapped event${mappedCount === 1 ? '' : 's'}`;
   if (status === 'found') return 'Showing your location';
   if (status === 'locating') return 'Finding your location';
   if (status === 'denied') return 'Location permission denied';
-  return `${mappedCount} mapped events`;
+  return 'No mapped events';
 }
 
 export default function Explore() {
@@ -214,8 +218,14 @@ export default function Explore() {
       (position) => {
         if (!alive) return;
 
-        setCurrentPosition([position.coords.latitude, position.coords.longitude]);
-        setLocationStatus('found');
+        const nextPosition: [number, number] = [position.coords.latitude, position.coords.longitude];
+
+        if (isLatLng(nextPosition)) {
+          setCurrentPosition(nextPosition);
+          setLocationStatus('found');
+        } else {
+          setLocationStatus('unavailable');
+        }
       },
       (locationError) => {
         if (!alive) return;
@@ -270,10 +280,20 @@ export default function Explore() {
 
   const mappedEvents = useMemo(
     () =>
-      visibleEvents.filter(hasCoordinates).map((event) => ({
-        ...event,
-        position: [Number(event.latitude), Number(event.longitude)] as [number, number],
-      })),
+      visibleEvents
+        .map((event) => {
+          const position = eventPosition(event);
+
+          if (!position) return null;
+
+          return {
+            ...event,
+            latitude: position[0],
+            longitude: position[1],
+            position,
+          };
+        })
+        .filter((event): event is MappedEvent => event !== null),
     [visibleEvents],
   );
   const selected = selectedId ? mappedEvents.find((event) => event.id === selectedId) ?? null : null;
@@ -319,27 +339,6 @@ export default function Explore() {
     setSelectedId(event.id);
   }
 
-  function focusEvents() {
-    if (!mapRef.current || mappedEvents.length === 0) {
-      return;
-    }
-
-    setSelectedId(null);
-    const eventPositions = mappedEvents.map((event) => event.position);
-
-    if (eventPositions.length === 1) {
-      mapRef.current.flyTo(eventPositions[0], 16, { duration: 0.7 });
-      return;
-    }
-
-    mapRef.current.fitBounds(eventPositions, {
-      animate: true,
-      duration: 0.7,
-      maxZoom: 16,
-      padding: [80, 80],
-    });
-  }
-
   function recenter() {
     setSelectedId(null);
 
@@ -369,7 +368,7 @@ export default function Explore() {
             ))}
           </MapContainer>
 
-          <div className="pointer-events-none absolute inset-x-0 top-0 z-[500] mx-auto flex w-full max-w-[1280px] flex-col gap-2 px-4 pt-4 lg:px-10">
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-500 mx-auto flex w-full max-w-7xl flex-col gap-2 px-4 pt-4 lg:px-10">
             <div className="pointer-events-auto flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
               <label className="relative flex max-w-xl flex-1 items-center rounded-full border-2 border-[#141b2b] bg-white shadow-[3px_3px_0_#141b2b] transition focus-within:-translate-x-px focus-within:-translate-y-px focus-within:shadow-[4px_4px_0_#1d4ed8]">
                 <Icon name="search" className="ml-4 text-[22px] text-[#434655]" />
@@ -396,7 +395,7 @@ export default function Explore() {
               </div>
             </div>
 
-            <div className="pointer-events-auto flex items-center gap-2 overflow-x-auto pb-2 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="group" aria-label="Filter events by category">
+            <div className="pointer-events-auto flex items-center gap-2 overflow-x-auto pb-2 pt-1 scrollbar-none [&::-webkit-scrollbar]:hidden" role="group" aria-label="Filter events by category">
               {filters.map((option) => {
                 const active = filter === option.id;
                 return (
@@ -419,7 +418,7 @@ export default function Explore() {
           </div>
 
           {(isLoading || error || visibleEvents.length === 0 || mappedEvents.length === 0) && (
-            <div className="absolute left-1/2 top-1/2 z-[500] w-[min(24rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-lg border-2 border-[#141b2b] bg-white px-4 py-3 text-center font-['Space_Grotesk'] text-xs font-bold uppercase leading-5 tracking-normal shadow-[3px_3px_0_#141b2b]">
+            <div className="absolute left-1/2 top-1/2 z-500 w-[min(24rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-lg border-2 border-[#141b2b] bg-white px-4 py-3 text-center font-['Space_Grotesk'] text-xs font-bold uppercase leading-5 tracking-normal shadow-[3px_3px_0_#141b2b]">
               {isLoading && 'Loading events'}
               {!isLoading && error && error}
               {!isLoading && !error && visibleEvents.length === 0 && 'No events match your filters'}
@@ -427,7 +426,7 @@ export default function Explore() {
             </div>
           )}
 
-          <div className="absolute bottom-6 right-6 z-[500] flex flex-col items-center gap-2">
+          <div className="absolute bottom-6 right-6 z-500 flex flex-col items-center gap-2">
             <div className="overflow-hidden rounded-lg border-2 border-[#141b2b] bg-white shadow-[3px_3px_0_#141b2b]">
               <button type="button" className="grid h-10 w-10 place-items-center border-b-2 border-[#141b2b] hover:bg-[#e9edff]" aria-label="Zoom in" title="Zoom in" onClick={() => mapRef.current?.zoomIn()}>
                 <Icon name="add" />
@@ -436,9 +435,6 @@ export default function Explore() {
                 <Icon name="remove" />
               </button>
             </div>
-            <button type="button" className="grid h-10 w-10 place-items-center rounded-lg border-2 border-[#141b2b] bg-white text-[#0037b0] shadow-[3px_3px_0_#141b2b] transition hover:-translate-x-px hover:-translate-y-px hover:shadow-[4px_4px_0_#141b2b] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:cursor-not-allowed disabled:opacity-50" aria-label="Show event markers" title="Show event markers" onClick={focusEvents} disabled={mappedEvents.length === 0}>
-              <Icon name="travel_explore" />
-            </button>
             <button type="button" className="grid h-10 w-10 place-items-center rounded-lg border-2 border-[#141b2b] bg-white text-[#00687a] shadow-[3px_3px_0_#141b2b] transition hover:-translate-x-px hover:-translate-y-px hover:shadow-[4px_4px_0_#141b2b] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none" aria-label="Re-center map on my location" title="Re-center map on my location" onClick={recenter}>
               <Icon name="my_location" />
             </button>
@@ -448,8 +444,4 @@ export default function Explore() {
     </div>
   );
 }
-
-
-
-
 

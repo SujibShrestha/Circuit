@@ -1,30 +1,9 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import EventForm from "../components/EventForm";
 import ProtectedRoute from "../components/ProtectedRoute";
-import { useAuth } from "../context/AuthContext";
 import Explore from "../pages/Explore";
 import SignUp from "../pages/SignUp";
 import "./App.css";
-
-function Dashboard() {
-  const { user, logout } = useAuth();
-
-  return (
-    <main className="dashboard-shell">
-      <section className="dashboard-panel">
-        <div>
-          <p className="eyebrow">Circuit</p>
-          <h1>Hi, {user?.name}</h1>
-          <p>
-            You are signed in as {user?.role}. Your current level is {user?.level}.
-          </p>
-        </div>
-        <button className="secondary-button" type="button" onClick={logout}>
-          Logout
-        </button>
-      </section>
-    </main>
-  );
-}
 
 export default function App() {
   return (
@@ -33,14 +12,22 @@ export default function App() {
       <Route path="/signup" element={<SignUp />} />
       <Route path="/explore" element={<Explore />} />
       <Route
-        path="/"
+        path="/host-event"
         element={
-          <ProtectedRoute>
-            <Dashboard />
+          <ProtectedRoute role="organizer">
+            <EventForm />
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <Navigate to="/explore" replace />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="*" element={<Navigate to="/explore" replace />} />
     </Routes>
   );
 }
