@@ -29,3 +29,20 @@ class RegistrationOut(BaseModel):
     status: RegistrationStatus
     created_at: datetime
     event: EventSummary
+
+class AttendeeUser(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    email: str
+    college: str | None = None
+
+
+class AttendeeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    status: RegistrationStatus
+    created_at: datetime
+    user: AttendeeUser

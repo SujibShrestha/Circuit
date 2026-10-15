@@ -135,8 +135,32 @@ def cancel_registration(db:Session, user_id:uuid.UUID, event_id:uuid.UUID) -> No
         db.rollback()
         raise RegistrationNotFoundError("Registration not found")
 
-    
 
-    
-    
+def list_registrations(db: Session, user_id: uuid.UUID)-> list[Registration]:
+    """List all registrations for a user."""
+    registrations = (
+        db.query(Registration)
+        .options(joinedload(Registration.event))
+        .filter(Registration.user_id == user_id)
+        .all()
+    )
+    if registrations is None:
+        raise RegistrationNotFoundError("No registrations found for this user")
+    return registrations   
+
+def list_event_attendees(db:Session, event_id:uuid.UUID, organizer_id:uuid.UUID) -> list[Registration]:
+    """List all registrations for an event. Only the organizer can view this."""
+    event = _lock_event(db, event_id)
+    if event.organizer_id != organizer_id:
+        raise NotEventOrganizerError("Only the organizer can view attendees")
+    registrations = (
+        db.query(Registration)
+        .options(joinedload(Registration.user))
+        .filter(Registration.event_id == event_id)
+        .all()
+    )
+    if registrations is None:
+        raise RegistrationNotFoundError("No registrations found for this event")
+    return registrations
+
     
