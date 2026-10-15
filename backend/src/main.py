@@ -6,6 +6,7 @@ from src.db.base import Base
 from src.db.session import engine
 from src.routes import auth_routes
 from src.routes import event_routes
+from src.routes import registration_routes
 
 load_dotenv()
 
@@ -35,6 +36,7 @@ async def root():
 #ROUTES
 app.include_router(auth_routes.router)
 app.include_router(event_routes.router)
+app.include_router(registration_routes.router)
 
 
 @app.get("/health")
