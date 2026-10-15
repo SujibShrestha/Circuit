@@ -98,4 +98,45 @@ def register_for_event(db: Session, user_id: uuid.UUID, event_id: uuid.UUID) -> 
     db.refresh(registration)
     return registration
 
+def cancel_registration(db:Session, user_id:uuid.UUID, event_id:uuid.UUID) -> None:
+    _lock_event(db, event_id)
+    registration = (
+        db.query(Registration)
+        .filter(Registration.event_id == event_id, Registration.user_id == user_id)
+        .first()
+    )
 
+    if not registration or registration.status not in (
+        RegistrationStatus.CONFIRMED,
+        RegistrationStatus.WAITLISTED,
+    ):
+        raise RegistrationNotFoundError("Registration not found")
+    freed_a_spot = registration.status == RegistrationStatus.CONFIRMED
+    registration.status = RegistrationStatus.CANCELLED
+
+    if freed_a_spot:
+        # Promote the first waitlisted registration to confirmed
+        waitlisted_registration = (
+            db.query(Registration)
+            .filter(
+                Registration.event_id == event_id,
+                Registration.status == RegistrationStatus.WAITLISTED,
+            )
+            .order_by(Registration.created_at)
+            .first()
+        )
+        if waitlisted_registration:
+            waitlisted_registration.status = RegistrationStatus.CONFIRMED
+            # later: send 'you are in' email to waitlisted_registration.user_id
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise RegistrationNotFoundError("Registration not found")
+
+    
+
+    
+    
+    

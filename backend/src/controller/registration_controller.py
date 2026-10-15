@@ -44,3 +44,29 @@ def register(
             detail="Failed to register for event.",
         )
     return RegistrationOut.model_validate(registration)
+
+
+def cancel(
+        registration_id: uuid.UUID,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+) -> RegistrationOut:
+    try:
+        registration = svc.cancel_registration(db, current_user.id, registration_id)
+    except svc.RegistrationNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except svc.NotEventOrganizerError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+
+    if not registration:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to cancel registration.",
+        )
+    return RegistrationOut.model_validate(registration)
