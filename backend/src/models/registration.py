@@ -34,6 +34,9 @@ class Registration(Base):
         nullable=False,
         index=True,
     )
+    team_id = Column(
+        UUID(as_uuid=True), ForeignKey("teams.id", ondelete="SET NULL"), nullable=True
+    )
     status = Column(Enum(RegistrationStatus), nullable=False)  # service decides
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -43,3 +46,4 @@ class Registration(Base):
 
     user = relationship("User")
     event = relationship("Event")
+    team = relationship("Team", back_populates="registrations")
