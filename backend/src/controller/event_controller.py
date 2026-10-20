@@ -3,12 +3,13 @@ import uuid
 from fastapi import Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from src.api.deps import require_role
+from src.api.deps import get_current_user, require_role
 from src.db.session import get_db
 from src.models.event import EventCategory
 from src.models.user import RoleEnum, User
 from src.schema.event import EventCreate, EventOut
-from src.services import event_service
+from src.schema.registration import AttendeeOut
+from src.services import event_service, registration_service
 
 def create_event(
     payload: EventCreate,
@@ -84,3 +85,24 @@ def get_event(event_id: uuid.UUID, db: Session = Depends(get_db)) -> EventOut:
         ) from exc
 
     return EventOut.model_validate(event)
+
+
+def list_attendees(
+    event_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[AttendeeOut]:
+    try:
+        attendees = registration_service.list_event_attendees(db, event_id, current_user.id)
+    except event_service.EventNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found.",
+        ) from exc
+    except registration_service.NotEventOrganizerError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+
+    return [AttendeeOut.model_validate(attendee) for attendee in attendees]

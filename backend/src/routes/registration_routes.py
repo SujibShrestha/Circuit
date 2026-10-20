@@ -1,6 +1,6 @@
 from fastapi import APIRouter,status
 from src.schema.registration import RegistrationOut
-from src.controller.registration_controller import cancel, register, list_event_registrations
+from src.controller.registration_controller import cancel, register, my_registrations
 
 router = APIRouter(prefix="/registrations", tags=["Registrations"])
 
@@ -13,16 +13,16 @@ router.add_api_route(
 )
 
 router.add_api_route(
+    "/me",
+    methods=["GET"],
+    response_model=list[RegistrationOut],
+    endpoint=my_registrations,
+)
+
+router.add_api_route(
     "/{registration_id}",
     methods=["DELETE"],
     response_model=RegistrationOut,
     endpoint=cancel,
     status_code=status.HTTP_200_OK,
-)
-
-router.add_api_route(
-    "/me",
-    methods=["GET"],
-    response_model=list[RegistrationOut],
-    endpoint=list_event_registrations,
 )

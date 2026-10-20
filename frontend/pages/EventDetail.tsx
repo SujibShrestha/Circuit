@@ -4,10 +4,22 @@ import { Link, useParams } from 'react-router-dom';
 import { MapContainer, Marker, TileLayer } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import api from '../api/api';
+import { useAuth } from '../context/AuthContext';
 import Navbar from '../components/Navbar';
 import './Explore.css';
 
 type Category = 'hackathon' | 'workshop' | 'seminar' | 'meetup';
+
+type Attendee = {
+  id: string;
+  status: string;
+  created_at: string;
+  user: {
+    id: string;
+    name: string;
+    college?: string | null;
+  };
+};
 
 type ApiEvent = {
   id: string;
@@ -85,10 +97,14 @@ function markerIcon(event: ApiEvent) {
 
 export default function EventDetail() {
   const { eventId } = useParams();
+  const { user } = useAuth();
   const missingEventId = !eventId;
   const [event, setEvent] = useState<ApiEvent | null>(null);
   const [isLoading, setIsLoading] = useState(!missingEventId);
   const [error, setError] = useState<string | null>(null);
+  const [attendees, setAttendees] = useState<Attendee[]>([]);
+  const [attendeesLoading, setAttendeesLoading] = useState(false);
+  const [attendeesError, setAttendeesError] = useState<string | null>(null);
 
   useEffect(() => {
     if (missingEventId) {
@@ -117,6 +133,34 @@ export default function EventDetail() {
 
     return () => request.abort();
   }, [eventId, missingEventId]);
+
+  const isOrganizer = Boolean(event && user?.id === event.organizer_id);
+
+  useEffect(() => {
+    if (!eventId || !isOrganizer) {
+      return;
+    }
+
+    const request = new AbortController();
+    setAttendeesLoading(true);
+    setAttendeesError(null);
+
+    api
+      .get<Attendee[]>(`/events/${eventId}/attendees`, { signal: request.signal })
+      .then((response) => setAttendees(response.data))
+      .catch(() => {
+        if (!request.signal.aborted) {
+          setAttendeesError('Could not load attendees.');
+        }
+      })
+      .finally(() => {
+        if (!request.signal.aborted) {
+          setAttendeesLoading(false);
+        }
+      });
+
+    return () => request.abort();
+  }, [eventId, isOrganizer]);
 
   const position = useMemo(() => (event ? eventPosition(event) : null), [event]);
   const meta = event ? CATEGORY_META[event.category] : null;
@@ -181,6 +225,53 @@ export default function EventDetail() {
                   {event.description || 'No description has been added yet.'}
                 </p>
               </div>
+              {isOrganizer && (
+                <div className="mt-6 overflow-hidden rounded-md border-2 border-[#141b2b] bg-white shadow-[3px_3px_0_#141b2b]">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#141b2b] px-5 py-4">
+                    <div>
+                      <h2 className="font-['Space_Grotesk'] text-sm font-bold uppercase">Attendees</h2>
+                      <p className="mt-1 text-xs text-[#747686]">Mark attended will live here later.</p>
+                    </div>
+                    <span className="rounded-full border-2 border-[#141b2b] bg-[#c7f464] px-3 py-1 font-['Space_Grotesk'] text-xs font-bold uppercase shadow-[2px_2px_0_#141b2b]">
+                      {attendees.length} total
+                    </span>
+                  </div>
+
+                  {attendeesLoading && <p className="px-5 py-4 text-sm text-[#434655]">Loading attendees</p>}
+                  {!attendeesLoading && attendeesError && <p className="px-5 py-4 text-sm font-semibold text-[#9f1239]">{attendeesError}</p>}
+                  {!attendeesLoading && !attendeesError && attendees.length === 0 && <p className="px-5 py-4 text-sm text-[#434655]">No attendees yet.</p>}
+
+                  {!attendeesLoading && !attendeesError && attendees.length > 0 && (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-left text-sm">
+                        <thead className="border-b border-[#dce2f7] bg-[#f1f3ff] font-['Space_Grotesk'] text-xs font-bold uppercase text-[#434655]">
+                          <tr>
+                            <th className="px-5 py-3">Name</th>
+                            <th className="px-5 py-3">College</th>
+                            <th className="px-5 py-3">Status</th>
+                            <th className="px-5 py-3">Registered</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#dce2f7]">
+                          {attendees.map((attendee) => (
+                            <tr key={attendee.id}>
+                              <td className="px-5 py-3 font-semibold text-[#141b2b]">{attendee.user.name}</td>
+                              <td className="px-5 py-3 text-[#434655]">{attendee.user.college || 'Not added'}</td>
+                              <td className="px-5 py-3">
+                                <span className="rounded-full border border-[#dce2f7] bg-white px-2 py-1 text-xs font-semibold uppercase text-[#434655]">
+                                  {attendee.status}
+                                </span>
+                              </td>
+                              <td className="px-5 py-3 text-[#434655]">{formatDateTime(attendee.created_at)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
             </section>
 
             <aside className="space-y-4">
@@ -217,3 +308,6 @@ export default function EventDetail() {
     </div>
   );
 }
+
+
+

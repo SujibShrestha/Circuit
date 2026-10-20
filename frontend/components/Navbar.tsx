@@ -6,7 +6,7 @@ const NAV_ITEMS: { label: string; to?: string }[] = [
   { label: 'Map Explore', to: '/explore' },
   { label: 'Event Details', to: '/events' },
   { label: 'Leaderboard' },
-  { label: 'My Profile' },
+  { label: 'My Profile', to: '/profile' },
   { label: 'Host Event', to: '/host-event' },
 ];
 

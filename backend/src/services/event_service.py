@@ -6,6 +6,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from src.models.event import Event, EventCategory
+from src.models.registration import Registration, RegistrationStatus
 from src.schema.event import EventCreate
 from src.utils.geocode import geocode_address
 
@@ -62,6 +63,26 @@ def _distance_km_expression(lat: float, lng: float):
     )
 
 
+def _attach_spots_left(db: Session, events: list[Event]) -> list[Event]:
+    if not events:
+        return events
+
+    counts = dict(
+        db.query(Registration.event_id, func.count(Registration.id))
+        .filter(
+            Registration.event_id.in_([event.id for event in events]),
+            Registration.status == RegistrationStatus.confirmed,
+        )
+        .group_by(Registration.event_id)
+        .all()
+    )
+
+    for event in events:
+        event.spots_left = max(event.capacity - int(counts.get(event.id, 0)), 0)
+
+    return events
+
+
 def list_events(
     db: Session,
     category: EventCategory | None = None,
@@ -112,12 +133,13 @@ def list_events(
         for event, distance in rows:
             event.distance_km = float(distance)
             events.append(event)
-        return events
+        return _attach_spots_left(db, events)
 
-    return query.order_by(Event.start_time).offset(offset).limit(limit).all()
+    events = query.order_by(Event.start_time).offset(offset).limit(limit).all()
+    return _attach_spots_left(db, events)
 
 def get_event(db: Session, event_id: uuid.UUID) -> Event:
     event = db.query(Event).filter(Event.id == event_id).first()
     if not event:
         raise EventNotFoundError("Event not found")
-    return event
+    return _attach_spots_left(db, [event])[0]

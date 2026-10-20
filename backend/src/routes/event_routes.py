@@ -1,8 +1,8 @@
 from fastapi import APIRouter, status
 
-from src.schema.registration import RegistrationOut
-from src.controller import event_controller,registration_controller
+from src.controller import event_controller
 from src.schema.event import EventOut
+from src.schema.registration import AttendeeOut
 
 router = APIRouter(prefix="/events", tags=["Events"])
 
@@ -20,15 +20,14 @@ router.add_api_route(
     response_model=list[EventOut],
 )
 router.add_api_route(
+    "/{event_id}/attendees",
+    event_controller.list_attendees,
+    methods=["GET"],
+    response_model=list[AttendeeOut],
+)
+router.add_api_route(
     "/{event_id}",
     event_controller.get_event,
     methods=["GET"],
     response_model=EventOut,
-)
-
-router.add_api_route(
-    "/{event_id}",
-   registration_controller.list_event_registrations,
-    methods=["GET"],
-    response_model=list[RegistrationOut],
 )

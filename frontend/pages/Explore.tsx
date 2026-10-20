@@ -29,6 +29,7 @@ type ApiEvent = {
   max_team_size: number;
   status: string;
   distance_km?: number | null;
+  spots_left?: number | null;
 };
 
 type LocatedEvent = ApiEvent & {
@@ -144,6 +145,8 @@ function markerIcon(event: MappedEvent, selected: boolean) {
 function EventCard({ event }: { event: MappedEvent }) {
   const meta = CATEGORY_META[event.category];
   const distance = formatDistance(event.distance_km);
+  const spotsLeft = event.spots_left == null ? null : Number(event.spots_left);
+  const isFull = spotsLeft !== null && spotsLeft <= 0;
 
   return (
     <article className="w-[min(22rem,calc(100vw-3rem))] bg-white text-[#141b2b]">
@@ -157,6 +160,11 @@ function EventCard({ event }: { event: MappedEvent }) {
         {distance && (
           <span className="rounded-full border-2 border-[#141b2b] bg-[#1d4ed8] px-2 py-0.5 font-['Space_Grotesk'] text-[10px] font-bold uppercase leading-3 text-white shadow-[1.5px_1.5px_0_#141b2b]">
             {distance}
+          </span>
+        )}
+        {spotsLeft !== null && (
+          <span className={`rounded-full border-2 border-[#141b2b] px-2 py-0.5 font-['Space_Grotesk'] text-[10px] font-bold uppercase leading-3 shadow-[1.5px_1.5px_0_#141b2b] ${isFull ? 'bg-[#ff5a5f] text-white' : 'bg-[#c7f464] text-[#17210a]'}`}>
+            {isFull ? 'Full' : `${spotsLeft} spots left`}
           </span>
         )}
       </div>
