@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import L from 'leaflet';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { MapContainer, Marker, TileLayer } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import api from '../api/api';
@@ -21,6 +21,15 @@ type Attendee = {
   };
 };
 
+type RegistrationStatus = 'confirmed' | 'waitlisted' | 'cancelled' | 'attended';
+
+type Registration = {
+  id: string;
+  event_id: string;
+  status: RegistrationStatus;
+  created_at: string;
+};
+
 type ApiEvent = {
   id: string;
   organizer_id: string;
@@ -36,6 +45,7 @@ type ApiEvent = {
   allow_teams: boolean;
   max_team_size: number;
   status: string;
+  spots_left?: number | null;
 };
 
 const CATEGORY_META: Record<Category, { label: string; icon: string; color: string }> = {
@@ -97,14 +107,19 @@ function markerIcon(event: ApiEvent) {
 
 export default function EventDetail() {
   const { eventId } = useParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const missingEventId = !eventId;
   const [event, setEvent] = useState<ApiEvent | null>(null);
   const [isLoading, setIsLoading] = useState(!missingEventId);
   const [error, setError] = useState<string | null>(null);
   const [attendees, setAttendees] = useState<Attendee[]>([]);
-  const [attendeesLoading, setAttendeesLoading] = useState(false);
+  const [attendeeEventId, setAttendeeEventId] = useState<string | null>(null);
   const [attendeesError, setAttendeesError] = useState<string | null>(null);
+  const [registration, setRegistration] = useState<Registration | null>(null);
+  const [registrationEventId, setRegistrationEventId] = useState<string | null>(null);
+  const [registrationError, setRegistrationError] = useState<string | null>(null);
+  const [registrationBusy, setRegistrationBusy] = useState(false);
 
   useEffect(() => {
     if (missingEventId) {
@@ -137,33 +152,113 @@ export default function EventDetail() {
   const isOrganizer = Boolean(event && user?.id === event.organizer_id);
 
   useEffect(() => {
+    if (!eventId || !user || isOrganizer) {
+      return;
+    }
+
+    const request = new AbortController();
+
+    api
+      .get<Registration[]>('/registrations/me', { signal: request.signal })
+      .then((response) => {
+        const currentRegistration = response.data.find(
+          (item) => item.event_id === eventId && (item.status === 'confirmed' || item.status === 'waitlisted'),
+        );
+
+        setRegistration(currentRegistration ?? null);
+        setRegistrationEventId(eventId);
+        setRegistrationError(null);
+      })
+      .catch(() => {
+        if (!request.signal.aborted) {
+          setRegistrationError('Could not load your registration status.');
+        }
+      });
+
+    return () => request.abort();
+  }, [eventId, isOrganizer, user]);
+
+  useEffect(() => {
     if (!eventId || !isOrganizer) {
       return;
     }
 
     const request = new AbortController();
-    setAttendeesLoading(true);
-    setAttendeesError(null);
-
     api
       .get<Attendee[]>(`/events/${eventId}/attendees`, { signal: request.signal })
-      .then((response) => setAttendees(response.data))
+      .then((response) => {
+        setAttendees(response.data);
+        setAttendeeEventId(eventId);
+        setAttendeesError(null);
+      })
       .catch(() => {
         if (!request.signal.aborted) {
           setAttendeesError('Could not load attendees.');
         }
       })
-      .finally(() => {
-        if (!request.signal.aborted) {
-          setAttendeesLoading(false);
-        }
-      });
 
     return () => request.abort();
   }, [eventId, isOrganizer]);
 
+  const visibleAttendees = attendeeEventId === eventId ? attendees : [];
+  const attendeesPending = isOrganizer && attendeeEventId !== eventId && !attendeesError;
+  const activeRegistration = registrationEventId === eventId ? registration : null;
+  const spotsLeft = event?.spots_left == null ? null : Number(event.spots_left);
+  const registrationPending = Boolean(user && !isOrganizer && registrationEventId !== eventId && !registrationError);
   const position = useMemo(() => (event ? eventPosition(event) : null), [event]);
   const meta = event ? CATEGORY_META[event.category] : null;
+
+  const registrationLabel = !user
+    ? 'Log in to register'
+    : registrationPending
+      ? 'Checking registration'
+      : activeRegistration?.status === 'confirmed'
+        ? 'Cancel registration'
+        : activeRegistration?.status === 'waitlisted'
+          ? 'Leave waitlist'
+          : spotsLeft !== null && spotsLeft <= 0
+            ? 'Join waitlist'
+            : 'Register';
+
+  async function refreshEvent() {
+    if (!eventId) return;
+
+    const response = await api.get<ApiEvent>(`/events/${eventId}`);
+    setEvent(response.data);
+  }
+
+  async function handleRegistrationAction() {
+    if (!eventId) return;
+
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    if (isOrganizer || registrationPending || registrationBusy) {
+      return;
+    }
+
+    setRegistrationBusy(true);
+    setRegistrationError(null);
+
+    try {
+      if (activeRegistration) {
+        await api.delete<Registration>(`/registrations/${activeRegistration.id}`);
+        setRegistration(null);
+      } else {
+        const response = await api.post<Registration>('/registrations/', { event_id: eventId });
+        setRegistration(response.data);
+      }
+
+      setRegistrationEventId(eventId);
+      await refreshEvent();
+    } catch {
+      setRegistrationError('Could not update your registration.');
+    } finally {
+      setRegistrationBusy(false);
+    }
+  }
 
   return (
     <div className="min-h-svh bg-[#f9f9ff] text-[#141b2b]">
@@ -233,15 +328,15 @@ export default function EventDetail() {
                       <p className="mt-1 text-xs text-[#747686]">Mark attended will live here later.</p>
                     </div>
                     <span className="rounded-full border-2 border-[#141b2b] bg-[#c7f464] px-3 py-1 font-['Space_Grotesk'] text-xs font-bold uppercase shadow-[2px_2px_0_#141b2b]">
-                      {attendees.length} total
+                      {visibleAttendees.length} total
                     </span>
                   </div>
 
-                  {attendeesLoading && <p className="px-5 py-4 text-sm text-[#434655]">Loading attendees</p>}
-                  {!attendeesLoading && attendeesError && <p className="px-5 py-4 text-sm font-semibold text-[#9f1239]">{attendeesError}</p>}
-                  {!attendeesLoading && !attendeesError && attendees.length === 0 && <p className="px-5 py-4 text-sm text-[#434655]">No attendees yet.</p>}
+                  {attendeesPending && <p className="px-5 py-4 text-sm text-[#434655]">Loading attendees</p>}
+                  {attendeesError && <p className="px-5 py-4 text-sm font-semibold text-[#9f1239]">{attendeesError}</p>}
+                  {!attendeesPending && !attendeesError && visibleAttendees.length === 0 && <p className="px-5 py-4 text-sm text-[#434655]">No attendees yet.</p>}
 
-                  {!attendeesLoading && !attendeesError && attendees.length > 0 && (
+                  {!attendeesPending && !attendeesError && visibleAttendees.length > 0 && (
                     <div className="overflow-x-auto">
                       <table className="min-w-full text-left text-sm">
                         <thead className="border-b border-[#dce2f7] bg-[#f1f3ff] font-['Space_Grotesk'] text-xs font-bold uppercase text-[#434655]">
@@ -253,7 +348,7 @@ export default function EventDetail() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#dce2f7]">
-                          {attendees.map((attendee) => (
+                          {visibleAttendees.map((attendee) => (
                             <tr key={attendee.id}>
                               <td className="px-5 py-3 font-semibold text-[#141b2b]">{attendee.user.name}</td>
                               <td className="px-5 py-3 text-[#434655]">{attendee.user.college || 'Not added'}</td>
@@ -284,7 +379,9 @@ export default function EventDetail() {
                   </p>
                   <p className="flex gap-2">
                     <Icon name="groups" className="text-lg text-[#1d4ed8]" />
-                    <span>{event.capacity.toLocaleString()} capacity</span>
+                    <span>
+                      {spotsLeft !== null ? `${spotsLeft} spots left` : `${event.capacity.toLocaleString()} capacity`}
+                    </span>
                   </p>
                   <p className="flex gap-2">
                     <Icon name="group_work" className="text-lg" />
@@ -292,6 +389,21 @@ export default function EventDetail() {
                   </p>
                 </div>
               </div>
+
+              {!isOrganizer && (
+                <div className="rounded-md border-2 border-[#141b2b] bg-white p-4 shadow-[3px_3px_0_#141b2b]">
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-center gap-2 rounded-md border-2 border-[#141b2b] bg-[#1d4ed8] px-4 py-3 font-['Space_Grotesk'] text-xs font-bold uppercase text-white shadow-[3px_3px_0_#141b2b] transition hover:-translate-x-px hover:-translate-y-px hover:shadow-[4px_4px_0_#141b2b] disabled:cursor-wait disabled:opacity-70 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+                    disabled={registrationBusy || registrationPending}
+                    onClick={handleRegistrationAction}
+                  >
+                    {registrationBusy ? 'Updating' : registrationLabel}
+                    <Icon name={activeRegistration ? 'close' : 'how_to_reg'} className="text-base text-white" />
+                  </button>
+                  {registrationError && <p className="mt-3 text-sm font-semibold text-[#9f1239]">{registrationError}</p>}
+                </div>
+              )}
 
               {position && (
                 <div className="h-72 overflow-hidden rounded-md border-2 border-[#141b2b] bg-white shadow-[3px_3px_0_#141b2b]">
@@ -308,6 +420,8 @@ export default function EventDetail() {
     </div>
   );
 }
+
+
 
 
 

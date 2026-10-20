@@ -57,6 +57,11 @@ def cancel(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
+    except event_service.EventNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
     except svc.NotEventOrganizerError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

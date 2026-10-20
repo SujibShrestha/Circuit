@@ -50,7 +50,7 @@ def _taken_spot(db:Session,event_id:uuid.UUID) -> int:
         db.query(func.count(Registration.id))
         .filter(
             Registration.event_id == event_id,
-            Registration.status == RegistrationStatus.CONFIRMED,
+            Registration.status == RegistrationStatus.confirmed,
         )
         .scalar()
     )
@@ -69,13 +69,13 @@ def register_for_event(db: Session, user_id: uuid.UUID, event_id: uuid.UUID) -> 
                 .filter(Registration.event_id == event_id, Registration.user_id == user_id)
                 .first())
 
-    if existing and existing.status != RegistrationStatus.CANCELLED:
+    if existing and existing.status != RegistrationStatus.cancelled:
         raise AlreadyRegisteredError("User is already registered for this event")
 
     status = (
-        RegistrationStatus.CONFIRMED
+        RegistrationStatus.confirmed
         if _taken_spot(db, event_id) < event.capacity
-        else RegistrationStatus.WAITLISTED
+        else RegistrationStatus.waitlisted
     )
 
     if existing:
@@ -98,35 +98,37 @@ def register_for_event(db: Session, user_id: uuid.UUID, event_id: uuid.UUID) -> 
     db.refresh(registration)
     return registration
 
-def cancel_registration(db:Session, user_id:uuid.UUID, event_id:uuid.UUID) -> None:
-    _lock_event(db, event_id)
+def cancel_registration(db:Session, user_id:uuid.UUID, registration_id:uuid.UUID) -> Registration:
     registration = (
         db.query(Registration)
-        .filter(Registration.event_id == event_id, Registration.user_id == user_id)
+        .options(joinedload(Registration.event))
+        .filter(Registration.id == registration_id, Registration.user_id == user_id)
         .first()
     )
 
     if not registration or registration.status not in (
-        RegistrationStatus.CONFIRMED,
-        RegistrationStatus.WAITLISTED,
+        RegistrationStatus.confirmed,
+        RegistrationStatus.waitlisted,
     ):
         raise RegistrationNotFoundError("Registration not found")
-    freed_a_spot = registration.status == RegistrationStatus.CONFIRMED
-    registration.status = RegistrationStatus.CANCELLED
+
+    _lock_event(db, registration.event_id)
+    freed_a_spot = registration.status == RegistrationStatus.confirmed
+    registration.status = RegistrationStatus.cancelled
 
     if freed_a_spot:
         # Promote the first waitlisted registration to confirmed
         waitlisted_registration = (
             db.query(Registration)
             .filter(
-                Registration.event_id == event_id,
-                Registration.status == RegistrationStatus.WAITLISTED,
+                Registration.event_id == registration.event_id,
+                Registration.status == RegistrationStatus.waitlisted,
             )
             .order_by(Registration.created_at)
             .first()
         )
         if waitlisted_registration:
-            waitlisted_registration.status = RegistrationStatus.CONFIRMED
+            waitlisted_registration.status = RegistrationStatus.confirmed
             # later: send 'you are in' email to waitlisted_registration.user_id
 
     try:
@@ -134,6 +136,9 @@ def cancel_registration(db:Session, user_id:uuid.UUID, event_id:uuid.UUID) -> No
     except IntegrityError:
         db.rollback()
         raise RegistrationNotFoundError("Registration not found")
+
+    db.refresh(registration)
+    return registration
 
 
 def list_registrations(db: Session, user_id: uuid.UUID)-> list[Registration]:
