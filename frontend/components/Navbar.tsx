@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const NAV_ITEMS: { label: string; to?: string }[] = [
+const NAV_ITEMS: { label: string; to?: string; organizerOnly?: boolean }[] = [
   { label: 'Map Explore', to: '/explore' },
   { label: 'Event Details', to: '/events' },
   { label: 'Leaderboard' },
   { label: 'My Profile', to: '/profile' },
-  { label: 'Host Event', to: '/host-event' },
+  { label: 'Host Event', to: '/host-event', organizerOnly: true },
 ];
 
 function initials(name: string) {
@@ -66,7 +66,7 @@ export default function Navbar() {
           </Link>
 
           <nav className="hidden items-center gap-4 xl:flex" aria-label="Primary">
-            {NAV_ITEMS.map((item) => {
+            {NAV_ITEMS.filter((item) => !item.organizerOnly || user?.role === 'organizer').map((item) => {
               const isActive = item.to === '/events' ? location.pathname.startsWith('/events') : item.to === location.pathname;
 
               if (!item.to) {
@@ -148,4 +148,3 @@ export default function Navbar() {
     </header>
   );
 }
-

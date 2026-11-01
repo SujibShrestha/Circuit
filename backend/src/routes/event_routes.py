@@ -1,7 +1,7 @@
-from backend.src.controller import team_controller
 from fastapi import APIRouter, status
 
 from src.controller import event_controller
+from src.controller import team_controller
 from src.schema.event import EventOut
 from src.schema.registration import AttendeeOut
 from src.schema.team import TeamOut

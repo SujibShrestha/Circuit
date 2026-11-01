@@ -1,19 +1,33 @@
-from pydantic import BaseModel, Field
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
 class TeamCreate(BaseModel):
-    event_id: str = Field(..., description="The ID of the event the team is associated with")
-    name: str = Field(..., description="The name of the team")
+    event_id: uuid.UUID
+    name: str = Field(min_length=2, max_length=50)
+
 
 class TeamMemberOut(BaseModel):
-    id: str = Field(..., description="The ID of the team member")
-    name: str = Field(..., description="The name of the team member")
-    email: str = Field(..., description="The email of the team member")
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID          # was: str
+    name: str
+    college: str | None = None
+
 
 class TeamOut(BaseModel):
-    id: str = Field(..., description="The ID of the team")
-    event_id: str = Field(..., description="The ID of the event the team is associated with")
-    leader_id: str = Field(..., description="The ID of the team leader")
-    name: str = Field(..., description="The name of the team")
-    members: list[TeamMemberOut] = Field(..., description="List of team members")
+    model_config = ConfigDict(from_attributes=True)
 
+    id: uuid.UUID          # was: str
+    event_id: uuid.UUID    # was: str
+    name: str
+    leader_id: uuid.UUID   # was: str
+    created_at: datetime
+    members: list[TeamMemberOut]
+
+    @computed_field
+    @property
+    def member_count(self) -> int:
+        return len(self.members)

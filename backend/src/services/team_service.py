@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy.exc import IntegrityError ,func
+from sqlalchemy.exc import IntegrityError 
+from sqlalchemy import func 
 from sqlalchemy.orm import Session, selectinload
 
 from src.models.event import Event

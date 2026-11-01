@@ -30,6 +30,20 @@ type Registration = {
   created_at: string;
 };
 
+type TeamMember = {
+  id: string;
+  name: string;
+  email: string;
+};
+
+type Team = {
+  id: string;
+  event_id: string;
+  leader_id: string;
+  name: string;
+  members: TeamMember[];
+};
+
 type ApiEvent = {
   id: string;
   organizer_id: string;
@@ -120,6 +134,11 @@ export default function EventDetail() {
   const [registrationEventId, setRegistrationEventId] = useState<string | null>(null);
   const [registrationError, setRegistrationError] = useState<string | null>(null);
   const [registrationBusy, setRegistrationBusy] = useState(false);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [teamsLoading, setTeamsLoading] = useState(false);
+  const [teamsError, setTeamsError] = useState<string | null>(null);
+  const [teamActionBusy, setTeamActionBusy] = useState(false);
+  const [teamName, setTeamName] = useState('');
 
   useEffect(() => {
     if (missingEventId) {
@@ -179,6 +198,32 @@ export default function EventDetail() {
   }, [eventId, isOrganizer, user]);
 
   useEffect(() => {
+    if (!eventId || !event?.allow_teams) {
+      return;
+    }
+
+    const request = new AbortController();
+    api
+      .get<Team[]>(`/events/${eventId}/teams`, { signal: request.signal })
+      .then((response) => {
+        setTeams(response.data);
+        setTeamsError(null);
+      })
+      .catch(() => {
+        if (!request.signal.aborted) {
+          setTeamsError('Could not load teams.');
+        }
+      })
+      .finally(() => {
+        if (!request.signal.aborted) {
+          setTeamsLoading(false);
+        }
+      });
+
+    return () => request.abort();
+  }, [event?.allow_teams, eventId]);
+
+  useEffect(() => {
     if (!eventId || !isOrganizer) {
       return;
     }
@@ -207,6 +252,81 @@ export default function EventDetail() {
   const registrationPending = Boolean(user && !isOrganizer && registrationEventId !== eventId && !registrationError);
   const position = useMemo(() => (event ? eventPosition(event) : null), [event]);
   const meta = event ? CATEGORY_META[event.category] : null;
+  const yourTeam = user ? teams.find((team) => team.members.some((member) => member.id === user.id)) : null;
+  const canCreateTeam = activeRegistration?.status === 'confirmed' && !yourTeam;
+
+  function getApiErrorDetail(caught: unknown) {
+    if (typeof caught === 'object' && caught !== null && 'response' in caught) {
+      const response = (caught as { response?: { data?: { detail?: unknown } } }).response;
+      if (typeof response?.data?.detail === 'string') return response.data.detail;
+    }
+    return 'Could not update your team.';
+  }
+
+  async function refreshTeamsAndRegistration() {
+    if (!eventId) return;
+
+    const requests: [Promise<{ data: Team[] }>, Promise<{ data: Registration[] }>] = [
+      api.get<Team[]>(`/events/${eventId}/teams`),
+      api.get<Registration[]>('/registrations/me'),
+    ];
+    const [teamsResponse, registrationsResponse] = await Promise.all(requests);
+    setTeams(teamsResponse.data);
+    const currentRegistration = registrationsResponse.data.find(
+      (item) => item.event_id === eventId && (item.status === 'confirmed' || item.status === 'waitlisted'),
+    );
+    setRegistration(currentRegistration ?? null);
+    setRegistrationEventId(eventId);
+  }
+
+  async function handleCreateTeam() {
+    if (!eventId || !user || !canCreateTeam || !teamName.trim() || teamActionBusy) return;
+
+    setTeamActionBusy(true);
+    setTeamsError(null);
+    try {
+      await api.post<Team>('/teams', { event_id: eventId, name: teamName.trim() });
+      setTeamName('');
+      await refreshTeamsAndRegistration();
+    } catch (caught) {
+      setTeamsError(getApiErrorDetail(caught));
+    } finally {
+      setTeamActionBusy(false);
+    }
+  }
+
+  async function handleJoinTeam(teamId: string) {
+    if (!user || yourTeam || teamActionBusy) {
+      if (!user) navigate('/login');
+      return;
+    }
+
+    setTeamActionBusy(true);
+    setTeamsError(null);
+    try {
+      await api.post<Team>(`/teams/${teamId}/join`);
+      await refreshTeamsAndRegistration();
+    } catch (caught) {
+      setTeamsError(getApiErrorDetail(caught));
+    } finally {
+      setTeamActionBusy(false);
+    }
+  }
+
+  async function handleLeaveTeam() {
+    if (!yourTeam || teamActionBusy) return;
+
+    setTeamActionBusy(true);
+    setTeamsError(null);
+    try {
+      await api.delete(`/teams/${yourTeam.id}/members/me`);
+      await refreshTeamsAndRegistration();
+    } catch (caught) {
+      setTeamsError(getApiErrorDetail(caught));
+    } finally {
+      setTeamActionBusy(false);
+    }
+  }
 
   const registrationLabel = !user
     ? 'Log in to register'
@@ -227,6 +347,18 @@ export default function EventDetail() {
     setEvent(response.data);
   }
 
+  async function refreshRegistration() {
+    if (!eventId) return;
+
+    const response = await api.get<Registration[]>('/registrations/me');
+    const currentRegistration = response.data.find(
+      (item) => item.event_id === eventId && (item.status === 'confirmed' || item.status === 'waitlisted'),
+    );
+
+    setRegistration(currentRegistration ?? null);
+    setRegistrationEventId(eventId);
+  }
+
   async function handleRegistrationAction() {
     if (!eventId) return;
 
@@ -245,16 +377,18 @@ export default function EventDetail() {
     try {
       if (activeRegistration) {
         await api.delete<Registration>(`/registrations/${activeRegistration.id}`);
-        setRegistration(null);
       } else {
-        const response = await api.post<Registration>('/registrations/', { event_id: eventId });
-        setRegistration(response.data);
+        await api.post<Registration>('/registrations/', { event_id: eventId });
       }
 
-      setRegistrationEventId(eventId);
-      await refreshEvent();
-    } catch {
-      setRegistrationError('Could not update your registration.');
+      await Promise.all([refreshRegistration(), refreshEvent()]);
+    } catch (caught) {
+      if (typeof caught === 'object' && caught !== null && 'response' in caught) {
+        const detail = (caught as { response?: { data?: { detail?: unknown } } }).response?.data?.detail;
+        setRegistrationError(typeof detail === 'string' ? detail : 'Could not update your registration.');
+      } else {
+        setRegistrationError('Could not update your registration.');
+      }
     } finally {
       setRegistrationBusy(false);
     }
@@ -367,6 +501,81 @@ export default function EventDetail() {
                 </div>
               )}
 
+              {event.allow_teams && (
+                <div className="mt-6 overflow-hidden rounded-md border-2 border-[#141b2b] bg-white shadow-[3px_3px_0_#141b2b]">
+                  <div className="border-b-2 border-[#141b2b] px-5 py-4">
+                    <h2 className="font-['Space_Grotesk'] text-sm font-bold uppercase">Teams</h2>
+                    <p className="mt-1 text-xs text-[#747686]">Join a team of up to {event.max_team_size} members.</p>
+                  </div>
+
+                  {yourTeam && (
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#dce2f7] bg-[#f1f3ff] px-5 py-4">
+                      <p className="text-sm font-semibold">Your team: {yourTeam.name}</p>
+                      <button
+                        type="button"
+                        className="rounded-md border-2 border-[#141b2b] bg-white px-3 py-2 font-['Space_Grotesk'] text-xs font-bold uppercase shadow-[2px_2px_0_#141b2b] disabled:cursor-wait disabled:opacity-60"
+                        disabled={teamActionBusy}
+                        onClick={handleLeaveTeam}
+                      >
+                        Leave
+                      </button>
+                    </div>
+                  )}
+
+                  {canCreateTeam && (
+                    <form
+                      className="flex flex-col gap-2 border-b border-[#dce2f7] px-5 py-4 sm:flex-row"
+                      onSubmit={(submitEvent) => {
+                        submitEvent.preventDefault();
+                        void handleCreateTeam();
+                      }}
+                    >
+                      <input
+                        value={teamName}
+                        onChange={(changeEvent) => setTeamName(changeEvent.target.value)}
+                        placeholder="Team name"
+                        aria-label="Team name"
+                        className="min-w-0 flex-1 rounded-md border-2 border-[#141b2b] bg-[#f9f9ff] px-3 py-2 text-sm outline-none focus:shadow-[0_0_0_3px_#b7c4ff]"
+                      />
+                      <button
+                        type="submit"
+                        className="rounded-md border-2 border-[#141b2b] bg-[#c7f464] px-3 py-2 font-['Space_Grotesk'] text-xs font-bold uppercase shadow-[2px_2px_0_#141b2b] disabled:cursor-wait disabled:opacity-60"
+                        disabled={teamActionBusy || !teamName.trim()}
+                      >
+                        Create team
+                      </button>
+                    </form>
+                  )}
+
+                  {teamsLoading && <p className="px-5 py-4 text-sm text-[#434655]">Loading teams</p>}
+                  {teamsError && <p className="px-5 py-4 text-sm font-semibold text-[#9f1239]">{teamsError}</p>}
+                  {!teamsLoading && !teamsError && teams.length === 0 && <p className="px-5 py-4 text-sm text-[#434655]">No teams yet.</p>}
+                  {!teamsLoading && !teamsError && teams.length > 0 && (
+                    <div className="divide-y divide-[#dce2f7]">
+                      {teams.map((team) => {
+                        const full = team.members.length >= event.max_team_size;
+                        return (
+                          <div key={team.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                            <div>
+                              <p className="font-semibold">{team.name}</p>
+                              <p className="mt-1 text-sm text-[#434655]">{team.members.length} / {event.max_team_size} members</p>
+                            </div>
+                            <button
+                              type="button"
+                              className="rounded-md border-2 border-[#141b2b] bg-[#1d4ed8] px-3 py-2 font-['Space_Grotesk'] text-xs font-bold uppercase text-white shadow-[2px_2px_0_#141b2b] disabled:cursor-not-allowed disabled:opacity-50"
+                              disabled={full || Boolean(yourTeam) || teamActionBusy}
+                              onClick={() => void handleJoinTeam(team.id)}
+                            >
+                              Join
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
             </section>
 
             <aside className="space-y-4">
@@ -420,8 +629,4 @@ export default function EventDetail() {
     </div>
   );
 }
-
-
-
-
 

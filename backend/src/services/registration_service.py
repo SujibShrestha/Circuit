@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from backend.src.services.team_membership import remove_from_team
+from src.services.team_membership import remove_from_team
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
