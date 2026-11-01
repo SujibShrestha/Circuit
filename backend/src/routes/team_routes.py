@@ -1,11 +1,17 @@
-from fastapi import APIRouter, Depends
-from src.models.user import User
-from src.schema.team import TeamCreate
-from src.controller import team_controller
-from src.api.deps import get_current_user
+from fastapi import APIRouter, status
 
-router = APIRouter(prefix="/teams", tags=["teams"])
+from src.controller import team_controller as ctrl
+from src.schema.team import TeamOut
 
-@router.post("/")
-def create_team(payload: TeamCreate, current_user: User = Depends(get_current_user)):
-    return team_controller.create(payload, current_user)
+router = APIRouter(prefix="/teams", tags=["Teams"])
+
+router.add_api_route(
+    "", ctrl.create_team, methods=["POST"],
+    response_model=TeamOut, status_code=status.HTTP_201_CREATED,
+)
+router.add_api_route("/{team_id}", ctrl.get_team, methods=["GET"], response_model=TeamOut)
+router.add_api_route("/{team_id}/join", ctrl.join_team, methods=["POST"], response_model=TeamOut)
+router.add_api_route(
+    "/{team_id}/members/me", ctrl.leave_team, methods=["DELETE"],
+    status_code=status.HTTP_204_NO_CONTENT,
+)

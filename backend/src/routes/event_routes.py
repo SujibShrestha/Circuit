@@ -1,8 +1,11 @@
+from backend.src.controller import team_controller
 from fastapi import APIRouter, status
 
 from src.controller import event_controller
 from src.schema.event import EventOut
 from src.schema.registration import AttendeeOut
+from src.schema.team import TeamOut
+
 
 router = APIRouter(prefix="/events", tags=["Events"])
 
@@ -30,4 +33,10 @@ router.add_api_route(
     event_controller.get_event,
     methods=["GET"],
     response_model=EventOut,
+)
+
+
+router.add_api_route(
+    "/{event_id}/teams", team_controller.list_event_teams,
+    methods=["GET"], response_model=list[TeamOut],
 )
