@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
+from src.services.team_membership import remove_from_team
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
@@ -113,6 +114,7 @@ def cancel_registration(db:Session, user_id:uuid.UUID, registration_id:uuid.UUID
         raise RegistrationNotFoundError("Registration not found")
 
     _lock_event(db, registration.event_id)
+    remove_from_team(db, user_id, registration.event_id)  
     freed_a_spot = registration.status == RegistrationStatus.confirmed
     registration.status = RegistrationStatus.cancelled
 

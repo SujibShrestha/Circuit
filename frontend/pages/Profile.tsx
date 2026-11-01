@@ -22,6 +22,12 @@ type Registration = {
   };
 };
 
+type Team = {
+  id: string;
+  name: string;
+  members: { id: string }[];
+};
+
 const MY_EVENTS_TABS: { id: MyEventsTab; label: string }[] = [
   { id: 'registered', label: 'Registered' },
   { id: 'waitlisted', label: 'Waitlisted' },
@@ -67,6 +73,7 @@ export default function Profile() {
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [registrationsLoading, setRegistrationsLoading] = useState(true);
   const [registrationsError, setRegistrationsError] = useState<string | null>(null);
+  const [teamNames, setTeamNames] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const request = new AbortController();
@@ -96,6 +103,27 @@ export default function Profile() {
 
     return () => request.abort();
   }, []);
+
+  useEffect(() => {
+    if (registrations.length === 0 || !user) {
+      return;
+    }
+
+    const eventIds = [...new Set(registrations.map((registration) => registration.event.id))];
+    Promise.all(
+      eventIds.map(async (eventId) => {
+        const response = await api.get<Team[]>(`/events/${eventId}/teams`);
+        const team = response.data.find((candidate) => candidate.members.some((member) => member.id === user.id));
+        return [eventId, team?.name] as const;
+      }),
+    )
+      .then((entries) => {
+        setTeamNames(Object.fromEntries(entries.filter((entry): entry is [string, string] => Boolean(entry[1]))));
+      })
+      .catch(() => {
+        setTeamNames({});
+      });
+  }, [registrations, user]);
 
   const registrationGroups = useMemo(() => {
     return {
@@ -247,6 +275,11 @@ export default function Profile() {
                       <span className={`rounded-full px-2 py-0.5 font-['Space_Grotesk'] text-[10px] font-bold uppercase ${statusClasses(registration.status)}`}>
                         {registration.status}
                       </span>
+                      {teamNames[registration.event.id] && (
+                        <span className="rounded-full bg-[#c7f464] px-2 py-0.5 font-['Space_Grotesk'] text-[10px] font-bold uppercase text-[#141b2b]">
+                          {teamNames[registration.event.id]}
+                        </span>
+                      )}
                     </div>
                     <p className="mt-1 flex min-w-0 items-center gap-1.5 text-sm text-[#434655]">
                       <Icon name="pin_drop" className="text-base text-[#00687a]" />
