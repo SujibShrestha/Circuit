@@ -22,7 +22,7 @@ class User(Base):
     password = Column(String, nullable=False)
     role = Column(Enum(RoleEnum), default=RoleEnum.participant, nullable=False)
     college = Column(String, nullable=True)
-    xp = Column(Integer, default=0, nullable=False)
+    xp = Column(Integer, default=0, nullable=False, index=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
