@@ -44,3 +44,23 @@ class EventOut(BaseModel):
     status: str  # derived property on the model
     distance_km: Optional[float] = None
     spots_left: Optional[int] = None
+
+
+class ResultItem(BaseModel):
+    place: int = Field(ge=1, le=3)
+    team_id: Optional[uuid.UUID] = None
+    user_id: Optional[uuid.UUID] = None
+
+    @model_validator(mode="after")
+    def exactly_one_target(self):
+        if (self.team_id is None) == (self.user_id is None):
+            raise ValueError("exactly one of team_id or user_id is required")
+        return self
+
+
+class ResultsCreate(BaseModel):
+    results: list[ResultItem] = Field(min_length=1, max_length=1000)
+
+
+class ResultsOut(BaseModel):
+    awarded: int
