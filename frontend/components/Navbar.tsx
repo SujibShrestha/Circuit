@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 const NAV_ITEMS: { label: string; to?: string; organizerOnly?: boolean }[] = [
   { label: 'Map Explore', to: '/explore' },
   { label: 'Event Details', to: '/events' },
-  { label: 'Leaderboard' },
+  { label: 'Leaderboard', to: '/leaderboard' },
   { label: 'My Profile', to: '/profile' },
   { label: 'Host Event', to: '/host-event', organizerOnly: true },
 ];

@@ -4,6 +4,7 @@ import ProtectedRoute from "../components/ProtectedRoute";
 import EventDetail from "../pages/EventDetail";
 import EventList from "../pages/EventList";
 import Explore from "../pages/Explore";
+import Leaderboard from "../pages/Leaderboard";
 import Profile from "../pages/Profile";
 import SignUp from "../pages/SignUp";
 import "./App.css";
@@ -16,6 +17,14 @@ export default function App() {
       <Route path="/explore" element={<Explore />} />
       <Route path="/events" element={<EventList />} />
       <Route path="/events/:eventId" element={<EventDetail />} />
+      <Route
+        path="/leaderboard"
+        element={
+          <ProtectedRoute>
+            <Leaderboard />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/profile"
         element={

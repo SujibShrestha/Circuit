@@ -18,6 +18,10 @@ class RegistrationStatus(str, enum.Enum):
     attended = "attended"
 
 
+# Statuses that occupy a capacity spot: an attendee still takes a seat.
+COUNTED_STATUSES = (RegistrationStatus.confirmed, RegistrationStatus.attended)
+
+
 class Registration(Base):
     __tablename__ = "registrations"
     __table_args__ = (

@@ -6,7 +6,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from src.models.event import Event, EventCategory
-from src.models.registration import Registration, RegistrationStatus
+from src.models.registration import COUNTED_STATUSES, Registration
 from src.schema.event import EventCreate
 from src.utils.geocode import geocode_address
 
@@ -71,7 +71,7 @@ def _attach_spots_left(db: Session, events: list[Event]) -> list[Event]:
         db.query(Registration.event_id, func.count(Registration.id))
         .filter(
             Registration.event_id.in_([event.id for event in events]),
-            Registration.status == RegistrationStatus.confirmed,
+            Registration.status.in_(COUNTED_STATUSES),
         )
         .group_by(Registration.event_id)
         .all()
