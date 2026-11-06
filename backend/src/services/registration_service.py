@@ -2,6 +2,13 @@ import uuid
 from datetime import datetime, timezone
 
 from src.services.team_membership import remove_from_team
+from src.schema.event import ResultItem
+from src.services.xp_service import (
+    PLACEMENT_REASONS,
+    XP_VALUES,
+    award_xp,
+    users_with_placement,
+)
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
@@ -14,6 +21,22 @@ class AlreadyRegisteredError(Exception):
     pass
 
 class EventEndedError(Exception):
+    pass
+
+
+class EventNotStartedError(Exception):
+    pass
+
+
+class EventNotEndedError(Exception):
+    pass
+
+
+class ResultsInvalidError(Exception):
+    pass
+
+
+class RegistrationStatusError(Exception):
     pass
 
 
@@ -169,5 +192,122 @@ def list_event_attendees(db:Session, event_id:uuid.UUID, organizer_id:uuid.UUID)
     if registrations is None:
         raise RegistrationNotFoundError("No registrations found for this event")
     return registrations
+
+
+def mark_attended(
+    db: Session,
+    event_id: uuid.UUID,
+    organizer_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> Registration:
+    """Organizer marks a confirmed registration attended and awards the
+    attendance XP. Idempotent: re-running does not award twice.
+    Commits: it owns the transaction."""
+    event = _lock_event(db, event_id)
+    if event.organizer_id != organizer_id:
+        raise NotEventOrganizerError("Only the organizer can mark attendance")
+    if event.start_time > datetime.now(timezone.utc):
+        raise EventNotStartedError("Event has not started yet")
+
+    registration = (
+        db.query(Registration)
+        .filter(Registration.event_id == event_id, Registration.user_id == user_id)
+        .with_for_update()
+        .first()
+    )
+    if not registration:
+        raise RegistrationNotFoundError("Registration not found")
+    if registration.status == RegistrationStatus.attended:
+        return registration
+    if registration.status != RegistrationStatus.confirmed:
+        raise RegistrationStatusError("Only confirmed registrations can be marked attended")
+
+    registration.status = RegistrationStatus.attended
+    award_xp(db, user_id, event_id, "attended", XP_VALUES["attended"])
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise RegistrationNotFoundError("Registration not found")
+    db.refresh(registration)
+    return registration
+
+
+def post_results(
+    db: Session,
+    event_id: uuid.UUID,
+    organizer_id: uuid.UUID,
+    results: list[ResultItem],
+) -> int:
+    """Award placement XP for a finished event. Per team on team events, per
+    person otherwise. Idempotent: users who already have placement XP for this
+    event are skipped. Commits once at the end: it owns the transaction."""
+    event = _lock_event(db, event_id)
+    if event.organizer_id != organizer_id:
+        raise NotEventOrganizerError("Only the organizer can post results")
+    if event.end_time > datetime.now(timezone.utc):
+        raise EventNotEndedError("Event has not ended yet")
+
+    # All validation happens before any award, so a bad payload never half-pays.
+    places = [item.place for item in results]
+    targets = [item.team_id or item.user_id for item in results]
+    if len(set(places)) != len(places):
+        raise ResultsInvalidError("Each place can only be used once")
+    if len(set(targets)) != len(targets):
+        raise ResultsInvalidError("Each team/user can only be placed once")
+    if event.allow_teams and any(item.team_id is None for item in results):
+        raise ResultsInvalidError("Team events take team_id in results")
+    if not event.allow_teams and any(item.user_id is None for item in results):
+        raise ResultsInvalidError("Solo events take user_id in results")
+
+    # One grouped query, not one per row.
+    members: dict[uuid.UUID, list[uuid.UUID]] = {}
+    if event.allow_teams:
+        rows = (
+            db.query(Registration.team_id, Registration.user_id)
+            .filter(
+                Registration.event_id == event_id,
+                Registration.status == RegistrationStatus.attended,
+                Registration.team_id.in_(targets),
+            )
+            .all()
+        )
+        for team_id, member_id in rows:
+            members.setdefault(team_id, []).append(member_id)
+    else:
+        rows = (
+            db.query(Registration.user_id)
+            .filter(
+                Registration.event_id == event_id,
+                Registration.status == RegistrationStatus.attended,
+                Registration.user_id.in_(targets),
+            )
+            .all()
+        )
+        members = {member_id: [member_id] for (member_id,) in rows}
+
+    unattended = [target for target in targets if not members.get(target)]
+    if unattended:
+        raise ResultsInvalidError(
+            "Every place needs at least one attendee marked attended"
+        )
+
+    already_placed = users_with_placement(db, event_id)
+    awarded = 0
+    for item, target in zip(results, targets):
+        reason = PLACEMENT_REASONS[item.place]
+        for member_id in members[target]:
+            if member_id in already_placed:
+                continue
+            if award_xp(db, member_id, event_id, reason, XP_VALUES[reason]):
+                awarded += 1
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise ResultsInvalidError("Results could not be saved")
+    return awarded
 
     

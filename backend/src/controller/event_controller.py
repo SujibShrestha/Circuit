@@ -7,7 +7,7 @@ from src.api.deps import get_current_user, require_role
 from src.db.session import get_db
 from src.models.event import EventCategory
 from src.models.user import RoleEnum, User
-from src.schema.event import EventCreate, EventOut
+from src.schema.event import EventCreate, EventOut, ResultsCreate, ResultsOut
 from src.schema.registration import AttendeeOut
 from src.services import event_service, registration_service
 
@@ -106,3 +106,72 @@ def list_attendees(
         ) from exc
 
     return [AttendeeOut.model_validate(attendee) for attendee in attendees]
+
+
+def mark_attended(
+    event_id: uuid.UUID,
+    user_id: uuid.UUID,
+    current_user: User = Depends(require_role(RoleEnum.organizer)),
+    db: Session = Depends(get_db),
+) -> AttendeeOut:
+    try:
+        registration = registration_service.mark_attended(
+            db, event_id, current_user.id, user_id
+        )
+    except event_service.EventNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found.",
+        ) from exc
+    except registration_service.RegistrationNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Registration not found.",
+        ) from exc
+    except registration_service.NotEventOrganizerError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except (
+        registration_service.EventNotStartedError,
+        registration_service.RegistrationStatusError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    return AttendeeOut.model_validate(registration)
+
+
+def post_results(
+    event_id: uuid.UUID,
+    payload: ResultsCreate,
+    current_user: User = Depends(require_role(RoleEnum.organizer)),
+    db: Session = Depends(get_db),
+) -> ResultsOut:
+    try:
+        awarded = registration_service.post_results(
+            db, event_id, current_user.id, payload.results
+        )
+    except event_service.EventNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Event not found.",
+        ) from exc
+    except registration_service.NotEventOrganizerError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except (
+        registration_service.EventNotEndedError,
+        registration_service.ResultsInvalidError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+    return ResultsOut(awarded=awarded)

@@ -2,7 +2,7 @@ from fastapi import APIRouter, status
 
 from src.controller import event_controller
 from src.controller import team_controller
-from src.schema.event import EventOut
+from src.schema.event import EventOut, ResultsOut
 from src.schema.registration import AttendeeOut
 from src.schema.team import TeamOut
 
@@ -27,6 +27,20 @@ router.add_api_route(
     event_controller.list_attendees,
     methods=["GET"],
     response_model=list[AttendeeOut],
+)
+router.add_api_route(
+    "/{event_id}/attendees/{user_id}/attend",
+    event_controller.mark_attended,
+    methods=["POST"],
+    response_model=AttendeeOut,
+    status_code=status.HTTP_200_OK,
+)
+router.add_api_route(
+    "/{event_id}/results",
+    event_controller.post_results,
+    methods=["POST"],
+    response_model=ResultsOut,
+    status_code=status.HTTP_200_OK,
 )
 router.add_api_route(
     "/{event_id}",
