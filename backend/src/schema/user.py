@@ -28,3 +28,5 @@ class UserOut(BaseModel):
     college: Optional[str] = None
     xp: int
     level: int
+    xp_into_level: int
+    xp_for_next_level: int

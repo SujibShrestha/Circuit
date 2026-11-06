@@ -18,6 +18,8 @@ export type User = {
   college: string | null;
   xp: number;
   level: number;
+  xp_into_level: number;
+  xp_for_next_level: number;
 };
 
 export type RegisterForm = {

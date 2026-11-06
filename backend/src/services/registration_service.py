@@ -14,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
 from src.models.event import Event
-from src.models.registration import Registration, RegistrationStatus
+from src.models.registration import COUNTED_STATUSES, Registration, RegistrationStatus
 from src.services.event_service import EventNotFoundError
 
 class AlreadyRegisteredError(Exception):
@@ -74,7 +74,7 @@ def _taken_spot(db:Session,event_id:uuid.UUID) -> int:
         db.query(func.count(Registration.id))
         .filter(
             Registration.event_id == event_id,
-            Registration.status == RegistrationStatus.confirmed,
+            Registration.status.in_(COUNTED_STATUSES),
         )
         .scalar()
     )

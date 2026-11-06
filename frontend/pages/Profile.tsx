@@ -3,24 +3,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import api from '../api/api';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../context/AuthContext';
+import useRegistrations, { type RegistrationStatus } from '../hooks/useRegistrations';
 
-type RegistrationStatus = 'confirmed' | 'waitlisted' | 'cancelled' | 'attended';
 type MyEventsTab = 'registered' | 'waitlisted' | 'past';
-
-type Registration = {
-  id: string;
-  event_id: string;
-  status: RegistrationStatus;
-  created_at: string;
-  event: {
-    id: string;
-    name: string;
-    venue: string;
-    start_time: string;
-    end_time: string;
-    status: string;
-  };
-};
 
 type Team = {
   id: string;
@@ -70,39 +55,12 @@ export default function Profile() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<MyEventsTab>('registered');
-  const [registrations, setRegistrations] = useState<Registration[]>([]);
-  const [registrationsLoading, setRegistrationsLoading] = useState(true);
-  const [registrationsError, setRegistrationsError] = useState<string | null>(null);
+  const {
+    registrations,
+    isLoading: registrationsLoading,
+    error: registrationsError,
+  } = useRegistrations();
   const [teamNames, setTeamNames] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    const request = new AbortController();
-
-    api
-      .get<Registration[]>('/registrations/me', { signal: request.signal })
-      .then((response) => setRegistrations(response.data))
-      .catch((caught) => {
-        if (request.signal.aborted) return;
-
-        const status = typeof caught === 'object' && caught !== null && 'response' in caught
-          ? (caught as { response?: { status?: number } }).response?.status
-          : undefined;
-
-        if (status === 404) {
-          setRegistrations([]);
-          return;
-        }
-
-        setRegistrationsError('Could not load your events.');
-      })
-      .finally(() => {
-        if (!request.signal.aborted) {
-          setRegistrationsLoading(false);
-        }
-      });
-
-    return () => request.abort();
-  }, []);
 
   useEffect(() => {
     if (registrations.length === 0 || !user) {
@@ -155,6 +113,13 @@ export default function Profile() {
 
   if (!user) return null;
 
+  // The level bar spans [50*(L-1)^2, 50*L^2): levelStart is where this level
+  // began, so both API fields map onto one progress fraction.
+  const levelStart = user.xp - user.xp_into_level;
+  const levelWidth = user.xp_for_next_level - levelStart;
+  const progress = (user.xp_into_level / levelWidth) * 100;
+  const remaining = levelWidth - user.xp_into_level;
+
   return (
     <div className="min-h-svh bg-[#f9f9ff] text-[#141b2b]">
       <Navbar />
@@ -183,14 +148,26 @@ export default function Profile() {
                 <p className="font-['Space_Grotesk'] text-xs font-bold uppercase text-[#747686]">College</p>
                 <p className="mt-1 text-lg font-semibold">{user.college || 'Not added'}</p>
               </div>
-              <div className="rounded-md border border-[#dce2f7] bg-[#f9f9ff] p-4">
-                <p className="font-['Space_Grotesk'] text-xs font-bold uppercase text-[#747686]">XP</p>
-                <p className="mt-1 text-lg font-semibold">{user.xp.toLocaleString()}</p>
+            </div>
+
+            <div className="mt-3 rounded-md border border-[#dce2f7] bg-[#f9f9ff] p-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-['Space_Grotesk'] text-xs font-bold uppercase text-[#747686]">Level {user.level}</p>
+                <p className="text-xs font-semibold text-[#434655]">{user.xp.toLocaleString()} XP</p>
               </div>
-              <div className="rounded-md border border-[#dce2f7] bg-[#f9f9ff] p-4">
-                <p className="font-['Space_Grotesk'] text-xs font-bold uppercase text-[#747686]">Level</p>
-                <p className="mt-1 text-lg font-semibold">{user.level}</p>
+              <div
+                className="mt-2 h-4 overflow-hidden rounded-full border-2 border-[#141b2b] bg-white"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={levelWidth}
+                aria-valuenow={user.xp_into_level}
+                aria-label={`Level ${user.level} progress`}
+              >
+                <div className="h-full bg-[#57dffe] transition-all" style={{ width: `${progress}%` }} />
               </div>
+              <p className="mt-2 text-xs text-[#434655]">
+                {remaining.toLocaleString()} XP to level {user.level + 1}
+              </p>
             </div>
           </section>
 

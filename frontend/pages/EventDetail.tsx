@@ -6,6 +6,7 @@ import 'leaflet/dist/leaflet.css';
 import api from '../api/api';
 import { useAuth } from '../context/AuthContext';
 import Navbar from '../components/Navbar';
+import useRegistrations, { type Registration } from '../hooks/useRegistrations';
 import './Explore.css';
 
 type Category = 'hackathon' | 'workshop' | 'seminar' | 'meetup';
@@ -19,15 +20,6 @@ type Attendee = {
     name: string;
     college?: string | null;
   };
-};
-
-type RegistrationStatus = 'confirmed' | 'waitlisted' | 'cancelled' | 'attended';
-
-type Registration = {
-  id: string;
-  event_id: string;
-  status: RegistrationStatus;
-  created_at: string;
 };
 
 type TeamMember = {
@@ -130,10 +122,16 @@ export default function EventDetail() {
   const [attendees, setAttendees] = useState<Attendee[]>([]);
   const [attendeeEventId, setAttendeeEventId] = useState<string | null>(null);
   const [attendeesError, setAttendeesError] = useState<string | null>(null);
-  const [registration, setRegistration] = useState<Registration | null>(null);
-  const [registrationEventId, setRegistrationEventId] = useState<string | null>(null);
+  const [attendBusyId, setAttendBusyId] = useState<string | null>(null);
+  const [attendError, setAttendError] = useState<string | null>(null);
   const [registrationError, setRegistrationError] = useState<string | null>(null);
   const [registrationBusy, setRegistrationBusy] = useState(false);
+  const {
+    registrations,
+    isLoading: registrationsLoading,
+    error: registrationsError,
+    refresh: refreshRegistrations,
+  } = useRegistrations(Boolean(user));
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
   const [teamsError, setTeamsError] = useState<string | null>(null);
@@ -169,33 +167,6 @@ export default function EventDetail() {
   }, [eventId, missingEventId]);
 
   const isOrganizer = Boolean(event && user?.id === event.organizer_id);
-
-  useEffect(() => {
-    if (!eventId || !user || isOrganizer) {
-      return;
-    }
-
-    const request = new AbortController();
-
-    api
-      .get<Registration[]>('/registrations/me', { signal: request.signal })
-      .then((response) => {
-        const currentRegistration = response.data.find(
-          (item) => item.event_id === eventId && (item.status === 'confirmed' || item.status === 'waitlisted'),
-        );
-
-        setRegistration(currentRegistration ?? null);
-        setRegistrationEventId(eventId);
-        setRegistrationError(null);
-      })
-      .catch(() => {
-        if (!request.signal.aborted) {
-          setRegistrationError('Could not load your registration status.');
-        }
-      });
-
-    return () => request.abort();
-  }, [eventId, isOrganizer, user]);
 
   useEffect(() => {
     if (!eventId || !event?.allow_teams) {
@@ -247,36 +218,35 @@ export default function EventDetail() {
 
   const visibleAttendees = attendeeEventId === eventId ? attendees : [];
   const attendeesPending = isOrganizer && attendeeEventId !== eventId && !attendeesError;
-  const activeRegistration = registrationEventId === eventId ? registration : null;
+  const activeRegistration =
+    !isOrganizer && !registrationsLoading && !registrationsError
+      ? (registrations.find(
+          (item) => item.event_id === eventId && (item.status === 'confirmed' || item.status === 'waitlisted'),
+        ) ?? null)
+      : null;
   const spotsLeft = event?.spots_left == null ? null : Number(event.spots_left);
-  const registrationPending = Boolean(user && !isOrganizer && registrationEventId !== eventId && !registrationError);
+  const registrationPending = Boolean(user && !isOrganizer && registrationsLoading && !registrationsError);
   const position = useMemo(() => (event ? eventPosition(event) : null), [event]);
   const meta = event ? CATEGORY_META[event.category] : null;
   const yourTeam = user ? teams.find((team) => team.members.some((member) => member.id === user.id)) : null;
   const canCreateTeam = activeRegistration?.status === 'confirmed' && !yourTeam;
 
-  function getApiErrorDetail(caught: unknown) {
+  function getApiErrorDetail(caught: unknown, fallback = 'Could not update your team.') {
     if (typeof caught === 'object' && caught !== null && 'response' in caught) {
       const response = (caught as { response?: { data?: { detail?: unknown } } }).response;
       if (typeof response?.data?.detail === 'string') return response.data.detail;
     }
-    return 'Could not update your team.';
+    return fallback;
   }
 
   async function refreshTeamsAndRegistration() {
     if (!eventId) return;
 
-    const requests: [Promise<{ data: Team[] }>, Promise<{ data: Registration[] }>] = [
+    const [teamsResponse] = await Promise.all([
       api.get<Team[]>(`/events/${eventId}/teams`),
-      api.get<Registration[]>('/registrations/me'),
-    ];
-    const [teamsResponse, registrationsResponse] = await Promise.all(requests);
+      refreshRegistrations(),
+    ]);
     setTeams(teamsResponse.data);
-    const currentRegistration = registrationsResponse.data.find(
-      (item) => item.event_id === eventId && (item.status === 'confirmed' || item.status === 'waitlisted'),
-    );
-    setRegistration(currentRegistration ?? null);
-    setRegistrationEventId(eventId);
   }
 
   async function handleCreateTeam() {
@@ -328,6 +298,25 @@ export default function EventDetail() {
     }
   }
 
+  async function handleMarkAttended(attendee: Attendee) {
+    if (!eventId || attendBusyId) return;
+
+    setAttendBusyId(attendee.user.id);
+    setAttendError(null);
+    try {
+      const response = await api.post<Attendee>(
+        `/events/${eventId}/attendees/${attendee.user.id}/attend`,
+      );
+      setAttendees((current) =>
+        current.map((item) => (item.id === response.data.id ? response.data : item)),
+      );
+    } catch (caught) {
+      setAttendError(getApiErrorDetail(caught, 'Could not mark attendance.'));
+    } finally {
+      setAttendBusyId(null);
+    }
+  }
+
   const registrationLabel = !user
     ? 'Log in to register'
     : registrationPending
@@ -345,18 +334,6 @@ export default function EventDetail() {
 
     const response = await api.get<ApiEvent>(`/events/${eventId}`);
     setEvent(response.data);
-  }
-
-  async function refreshRegistration() {
-    if (!eventId) return;
-
-    const response = await api.get<Registration[]>('/registrations/me');
-    const currentRegistration = response.data.find(
-      (item) => item.event_id === eventId && (item.status === 'confirmed' || item.status === 'waitlisted'),
-    );
-
-    setRegistration(currentRegistration ?? null);
-    setRegistrationEventId(eventId);
   }
 
   async function handleRegistrationAction() {
@@ -381,7 +358,7 @@ export default function EventDetail() {
         await api.post<Registration>('/registrations/', { event_id: eventId });
       }
 
-      await Promise.all([refreshRegistration(), refreshEvent()]);
+      await Promise.all([refreshRegistrations(), refreshEvent()]);
     } catch (caught) {
       if (typeof caught === 'object' && caught !== null && 'response' in caught) {
         const detail = (caught as { response?: { data?: { detail?: unknown } } }).response?.data?.detail;
@@ -459,7 +436,7 @@ export default function EventDetail() {
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-[#141b2b] px-5 py-4">
                     <div>
                       <h2 className="font-['Space_Grotesk'] text-sm font-bold uppercase">Attendees</h2>
-                      <p className="mt-1 text-xs text-[#747686]">Mark attended will live here later.</p>
+                      <p className="mt-1 text-xs text-[#747686]">Mark confirmed attendees as attended to award XP.</p>
                     </div>
                     <span className="rounded-full border-2 border-[#141b2b] bg-[#c7f464] px-3 py-1 font-['Space_Grotesk'] text-xs font-bold uppercase shadow-[2px_2px_0_#141b2b]">
                       {visibleAttendees.length} total
@@ -468,6 +445,7 @@ export default function EventDetail() {
 
                   {attendeesPending && <p className="px-5 py-4 text-sm text-[#434655]">Loading attendees</p>}
                   {attendeesError && <p className="px-5 py-4 text-sm font-semibold text-[#9f1239]">{attendeesError}</p>}
+                  {attendError && <p className="px-5 py-4 text-sm font-semibold text-[#9f1239]">{attendError}</p>}
                   {!attendeesPending && !attendeesError && visibleAttendees.length === 0 && <p className="px-5 py-4 text-sm text-[#434655]">No attendees yet.</p>}
 
                   {!attendeesPending && !attendeesError && visibleAttendees.length > 0 && (
@@ -479,6 +457,7 @@ export default function EventDetail() {
                             <th className="px-5 py-3">College</th>
                             <th className="px-5 py-3">Status</th>
                             <th className="px-5 py-3">Registered</th>
+                            <th className="px-5 py-3">Action</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#dce2f7]">
@@ -492,6 +471,21 @@ export default function EventDetail() {
                                 </span>
                               </td>
                               <td className="px-5 py-3 text-[#434655]">{formatDateTime(attendee.created_at)}</td>
+                              <td className="px-5 py-3">
+                                {attendee.status === 'confirmed' ? (
+                                  <button
+                                    type="button"
+                                    disabled={Boolean(attendBusyId) || event.status === 'upcoming'}
+                                    title={event.status === 'upcoming' ? 'Event has not started yet' : undefined}
+                                    onClick={() => void handleMarkAttended(attendee)}
+                                    className="rounded-md border-2 border-[#141b2b] bg-[#c7f464] px-3 py-2 font-['Space_Grotesk'] text-xs font-bold uppercase shadow-[2px_2px_0_#141b2b] transition hover:-translate-x-px hover:-translate-y-px hover:shadow-[3px_3px_0_#141b2b] disabled:cursor-not-allowed disabled:opacity-50 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+                                  >
+                                    {attendBusyId === attendee.user.id ? 'Marking' : 'Mark attended'}
+                                  </button>
+                                ) : (
+                                  <span className="text-[#747686]" aria-hidden="true">—</span>
+                                )}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -610,7 +604,11 @@ export default function EventDetail() {
                     {registrationBusy ? 'Updating' : registrationLabel}
                     <Icon name={activeRegistration ? 'close' : 'how_to_reg'} className="text-base text-white" />
                   </button>
-                  {registrationError && <p className="mt-3 text-sm font-semibold text-[#9f1239]">{registrationError}</p>}
+                  {(registrationError || registrationsError) && (
+                    <p className="mt-3 text-sm font-semibold text-[#9f1239]">
+                      {registrationError ?? registrationsError}
+                    </p>
+                  )}
                 </div>
               )}
 

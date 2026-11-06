@@ -31,8 +31,6 @@ export default function Leaderboard() {
 
   useEffect(() => {
     const request = new AbortController();
-    setIsLoading(true);
-    setError(null);
 
     api
       .get<LeaderboardEntry[]>('/leaderboard', {
@@ -52,6 +50,15 @@ export default function Leaderboard() {
   }, [scope]);
 
   const hasCollege = Boolean(user?.college);
+
+  // Resetting loading/error here rather than in the effect keeps setState out
+  // of the effect body (react-hooks/set-state-in-effect).
+  function selectScope(next: Scope) {
+    if (next === scope) return;
+    setScope(next);
+    setIsLoading(true);
+    setError(null);
+  }
 
   return (
     <div className="min-h-svh bg-[#f9f9ff] text-[#141b2b]">
@@ -74,7 +81,7 @@ export default function Leaderboard() {
                 aria-pressed={active}
                 disabled={option.disabled}
                 title={option.disabled ? 'Add a college to your profile to see this' : undefined}
-                onClick={() => setScope(option.id)}
+                onClick={() => selectScope(option.id)}
                 className={`flex shrink-0 items-center gap-1.5 rounded-full border-2 border-[#141b2b] px-4 py-1.5 font-['Space_Grotesk'] text-xs font-semibold uppercase leading-4 shadow-[3px_3px_0_#141b2b] transition active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:cursor-not-allowed disabled:border-[#dce2f7] disabled:bg-white disabled:text-[#747686] disabled:shadow-none ${
                   active ? 'bg-[#1d4ed8] text-white' : 'bg-white text-[#141b2b]'
                 }`}
