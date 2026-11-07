@@ -137,6 +137,10 @@ export default function EventDetail() {
   const [teamsError, setTeamsError] = useState<string | null>(null);
   const [teamActionBusy, setTeamActionBusy] = useState(false);
   const [teamName, setTeamName] = useState('');
+  const [resultsBusy, setResultsBusy] = useState(false);
+  const [resultsError, setResultsError] = useState<string | null>(null);
+  const [resultsMessage, setResultsMessage] = useState<string | null>(null);
+  const [places, setPlaces] = useState<[string, string, string]>(['', '', '']);
 
   useEffect(() => {
     if (missingEventId) {
@@ -317,6 +321,50 @@ export default function EventDetail() {
     }
   }
 
+  // Placement XP targets: teams with an attended member, or attended people.
+  const attendedIds = new Set(
+    visibleAttendees.filter((attendee) => attendee.status === 'attended').map((attendee) => attendee.user.id),
+  );
+  const resultTargets = event?.allow_teams
+    ? teams
+        .filter((team) => team.members.some((member) => attendedIds.has(member.id)))
+        .map((team) => ({ id: team.id, label: team.name }))
+    : visibleAttendees
+        .filter((attendee) => attendedIds.has(attendee.user.id))
+        .map((attendee) => ({ id: attendee.user.id, label: attendee.user.name }));
+
+  async function handlePostResults() {
+    if (!eventId || !event || resultsBusy) return;
+
+    const results = places
+      .map((target, index) => ({ place: index + 1, target }))
+      .filter((item) => item.target)
+      .map((item) =>
+        event.allow_teams
+          ? { place: item.place, team_id: item.target }
+          : { place: item.place, user_id: item.target },
+      );
+
+    if (results.length === 0) return;
+
+    setResultsBusy(true);
+    setResultsError(null);
+    setResultsMessage(null);
+    try {
+      const response = await api.post<{ awarded: number }>(`/events/${eventId}/results`, { results });
+      setResultsMessage(
+        response.data.awarded > 0
+          ? `Awarded placement XP to ${response.data.awarded} ${response.data.awarded === 1 ? 'person' : 'people'}.`
+          : 'Results saved — those placements already had XP.',
+      );
+      setPlaces(['', '', '']);
+    } catch (caught) {
+      setResultsError(getApiErrorDetail(caught, 'Could not post results.'));
+    } finally {
+      setResultsBusy(false);
+    }
+  }
+
   const registrationLabel = !user
     ? 'Log in to register'
     : registrationPending
@@ -492,6 +540,66 @@ export default function EventDetail() {
                       </table>
                     </div>
                   )}
+                </div>
+              )}
+
+              {isOrganizer && event.status === 'completed' && (
+                <div className="mt-6 overflow-hidden rounded-md border-2 border-[#141b2b] bg-white shadow-[3px_3px_0_#141b2b]">
+                  <div className="border-b-2 border-[#141b2b] px-5 py-4">
+                    <h2 className="font-['Space_Grotesk'] text-sm font-bold uppercase">Post results</h2>
+                    <p className="mt-1 text-xs text-[#747686]">
+                      Award 100 / 75 / 50 XP for 1st, 2nd and 3rd. Only
+                      {event.allow_teams ? ' teams with an attended member' : ' attended people'} can place, and each
+                      placement can only be posted once.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3 px-5 py-4">
+                    {[0, 1, 2].map((index) => {
+                      const taken = new Set(places.filter((_, other) => other !== index));
+                      return (
+                        <div key={index} className="flex flex-wrap items-center gap-3">
+                          <span className="w-24 font-['Space_Grotesk'] text-xs font-bold uppercase text-[#434655]">
+                            {['1st place', '2nd place', '3rd place'][index]}
+                          </span>
+                          <select
+                            value={places[index]}
+                            aria-label={`${['1st', '2nd', '3rd'][index]} place`}
+                            onChange={(changeEvent) =>
+                              setPlaces((current) =>
+                                current.map((value, position) =>
+                                  position === index ? changeEvent.target.value : value,
+                                ) as [string, string, string],
+                              )
+                            }
+                            className="min-w-0 flex-1 rounded-md border-2 border-[#141b2b] bg-[#f9f9ff] px-3 py-2 text-sm outline-none focus:shadow-[0_0_0_3px_#b7c4ff]"
+                          >
+                            <option value="">Skip this place</option>
+                            {resultTargets.map((target) => (
+                              <option key={target.id} value={target.id} disabled={taken.has(target.id)}>
+                                {target.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })}
+
+                    {resultTargets.length === 0 && (
+                      <p className="text-sm text-[#434655]">Mark attendees as attended first.</p>
+                    )}
+                    {resultsError && <p className="text-sm font-semibold text-[#9f1239]">{resultsError}</p>}
+                    {resultsMessage && <p className="text-sm font-semibold text-[#00687a]">{resultsMessage}</p>}
+
+                    <button
+                      type="button"
+                      disabled={resultsBusy || resultTargets.length === 0 || places.every((place) => !place)}
+                      onClick={() => void handlePostResults()}
+                      className="rounded-md border-2 border-[#141b2b] bg-[#c7f464] px-3 py-2 font-['Space_Grotesk'] text-xs font-bold uppercase shadow-[2px_2px_0_#141b2b] transition hover:-translate-x-px hover:-translate-y-px hover:shadow-[3px_3px_0_#141b2b] disabled:cursor-not-allowed disabled:opacity-50 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+                    >
+                      {resultsBusy ? 'Posting…' : 'Post results'}
+                    </button>
+                  </div>
                 </div>
               )}
 

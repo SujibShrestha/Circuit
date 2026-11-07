@@ -19,6 +19,22 @@ const MY_EVENTS_TABS: { id: MyEventsTab; label: string }[] = [
   { id: 'past', label: 'Past' },
 ];
 
+type XpEntry = {
+  id: string;
+  reason: string;
+  xp: number;
+  event_name: string | null;
+  created_at: string;
+};
+
+const XP_REASON_LABELS: Record<string, string> = {
+  signup: 'Signed up',
+  attended: 'Attended event',
+  won_first: '1st place',
+  won_second: '2nd place',
+  won_third: '3rd place',
+};
+
 function initials(name: string) {
   return name
     .split(/\s+/)
@@ -61,6 +77,15 @@ export default function Profile() {
     error: registrationsError,
   } = useRegistrations();
   const [teamNames, setTeamNames] = useState<Record<string, string>>({});
+  const [xpEntries, setXpEntries] = useState<XpEntry[]>([]);
+  const [xpError, setXpError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .get<XpEntry[]>('/auth/me/xp')
+      .then((response) => setXpEntries(response.data))
+      .catch(() => setXpError('Could not load your XP history.'));
+  }, []);
 
   useEffect(() => {
     if (registrations.length === 0 || !user) {
@@ -271,6 +296,32 @@ export default function Profile() {
                     <Icon name="arrow_forward" className="text-base" />
                   </span>
                 </Link>
+              ))}
+            </div>
+          )}
+        </section>
+        <section className="mt-6 rounded-md border-2 border-[#141b2b] bg-white p-5 shadow-[3px_3px_0_#141b2b]">
+          <p className="font-['Space_Grotesk'] text-xs font-bold uppercase text-[#434655]">Where it came from</p>
+          <h2 className="mt-1 text-2xl font-semibold leading-8">XP history</h2>
+
+          {xpError && <p className="mt-5 text-sm font-semibold text-[#9f1239]">{xpError}</p>}
+          {!xpError && xpEntries.length === 0 && <p className="mt-5 text-sm text-[#434655]">No XP earned yet.</p>}
+
+          {!xpError && xpEntries.length > 0 && (
+            <div className="mt-5 divide-y divide-[#dce2f7]">
+              {xpEntries.map((entry) => (
+                <div key={entry.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold">
+                      {XP_REASON_LABELS[entry.reason] ?? entry.reason}
+                      {entry.event_name ? ` — ${entry.event_name}` : ''}
+                    </p>
+                    <p className="mt-0.5 text-xs text-[#747686]">{formatDateTime(entry.created_at)}</p>
+                  </div>
+                  <span className="rounded-full border-2 border-[#141b2b] bg-[#c7f464] px-3 py-1 font-['Space_Grotesk'] text-xs font-bold uppercase shadow-[2px_2px_0_#141b2b]">
+                    +{entry.xp} XP
+                  </span>
+                </div>
               ))}
             </div>
           )}

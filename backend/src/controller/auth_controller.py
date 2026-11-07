@@ -6,8 +6,8 @@ from src.api.deps import get_current_user
 from src.core.security import create_access_token
 from src.db.session import get_db
 from src.models.user import User
-from src.schema.user import UserCreate, UserOut
-from src.services import auth_service
+from src.schema.user import UserCreate, UserOut, XpLedgerEntry
+from src.services import auth_service, xp_service
 
 
 def register(payload:UserCreate, db: Session= Depends(get_db)):
@@ -35,3 +35,20 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 
 def me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+def me_xp(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[XpLedgerEntry]:
+    return [
+        XpLedgerEntry(
+            id=entry.id,
+            reason=entry.reason,
+            xp=entry.xp,
+            event_id=entry.event_id,
+            event_name=entry.event.name if entry.event else None,
+            created_at=entry.created_at,
+        )
+        for entry in xp_service.list_user_xp(db, current_user.id)
+    ]

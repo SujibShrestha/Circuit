@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from src.schema.user import UserCreate
 from src.models.user import User
 from src.core.security import hash_password,verify_password
+from src.services.xp_service import XP_VALUES, award_xp
 
 
 class EmailAlreadyExistsError(Exception):
@@ -24,6 +25,11 @@ def register_user(db,payload: UserCreate):
     )
 
     db.add(user)
+    db.flush()  # gives the signup bonus a user_id to attach to
+
+    # signup bonus: no event, so event_id stays NULL in the ledger
+    award_xp(db, user.id, None, "signup", XP_VALUES["signup"])
+
     try:
         db.commit() 
     except IntegrityError:
