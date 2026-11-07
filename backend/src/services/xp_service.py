@@ -2,12 +2,14 @@ import uuid
 
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
+from src.models.event import Event
 from src.models.user import User
 from src.models.xp_transaction import XpTransaction
 
 XP_VALUES = {
+    "signup": 100,
     "attended": 15,
     "won_third": 50,
     "won_second": 75,
@@ -54,3 +56,15 @@ def users_with_placement(db: Session, event_id: uuid.UUID) -> set[uuid.UUID]:
         .all()
     )
     return {row[0] for row in rows}
+
+
+def list_user_xp(db: Session, user_id: uuid.UUID) -> list[XpTransaction]:
+    """Newest-first XP ledger for one user, with the event name attached
+    (outer join: the signup bonus has no event)."""
+    return (
+        db.query(XpTransaction)
+        .options(joinedload(XpTransaction.event))
+        .filter(XpTransaction.user_id == user_id)
+        .order_by(XpTransaction.created_at.desc(), XpTransaction.id.desc())
+        .all()
+    )
